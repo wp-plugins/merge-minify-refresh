@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: http://launchinteractive.com.au/wordpress/min.zip
  * Description: 
- * Version: 0.1
+ * Version: 0.2
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -43,6 +43,8 @@ class MergeMinifyRefresh {
 	    add_action( 'admin_menu', array($this,'admin_menu') );
 	    
 	    add_action( 'admin_enqueue_scripts', array($this,'load_admin_styles') );
+	    
+	    add_action( 'admin_init', array($this,'merge_minify_refresh_settings_action') );
 	    
 	  } else {
 
@@ -85,14 +87,8 @@ class MergeMinifyRefresh {
   public function admin_menu() {
 	  add_options_page( 'Merge + Minify + Refresh Settings', 'Merge + Minify + Refresh', 'manage_options', 'merge-minify-refresh', array($this,'merge_minify_refresh_settings') );
   }
-  
-  public function merge_minify_refresh_settings() {
-	  if ( !current_user_can( 'manage_options' ) )  {
-			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
-		}
-		
-		if(isset($_GET['purge'])) {
-			
+  public function merge_minify_refresh_settings_action() {
+	  if(isset($_GET['page'],$_GET['purge']) && $_GET['page']=='merge-minify-refresh') {
 			if($_GET['purge'] == 'all') {
 				$this->rrmdir(WP_CONTENT_DIR.'/mmr'); 
 			} else {
@@ -103,10 +99,15 @@ class MergeMinifyRefresh {
 					unlink(WP_CONTENT_DIR.'/mmr/'.$_GET['purge'].'.log');
 				}
 			}
-			header('location: options-general.php?page=merge-minify-refresh');
-			exit();
+			wp_redirect( 'options-general.php?page=merge-minify-refresh' );
+			exit;
 		}
-		
+	}
+  public function merge_minify_refresh_settings() {
+	  if ( !current_user_can( 'manage_options' ) )  {
+			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
+		}
+
 		$files = glob(WP_CONTENT_DIR.'/mmr/*.{js,css}', GLOB_BRACE);
 		
 		echo '<div id="merge-minify-refresh"><h2>Merge + Minify + Refresh Settings</h2>';
@@ -151,6 +152,8 @@ class MergeMinifyRefresh {
 			return false;
 		}
 		
+		if(mb_substr($url, 0, 4) !== 'http') $url = 'http:' . $url;
+
 		$url_host = parse_url( $url, PHP_URL_HOST );
 		
 		if(  !$url_host || $url_host == $this->host ) {
@@ -178,6 +181,8 @@ class MergeMinifyRefresh {
     	
     	$is_footer = isset($wp_scripts->registered[$handle]->extra['group']);
     	
+    	
+    	
     	$array = ($is_footer ? 'footer' : 'header');
 
 	    if( $this->host_match($wp_scripts->registered[$handle]->src)) { //is a local script
@@ -201,6 +206,9 @@ class MergeMinifyRefresh {
 		    
 		  } else { //external script
 
+				//var_dump($wp_scripts->registered[$handle]);
+				//var_dump($footer);
+
 				array_push(${$array}, array('handle'=>$handle,'data'=>''));
 
 		  }
@@ -208,6 +216,8 @@ class MergeMinifyRefresh {
 		  wp_dequeue_script($handle); //dequeue all scripts as we will enqueue in order below
 
 		endforeach;
+		
+		
 
 		//loop through header scripts and merge + schedule wpcron
 		for($i=0,$l=count($header);$i<$l;$i++) {
@@ -252,8 +262,12 @@ class MergeMinifyRefresh {
 		
 						file_put_contents($full_path , $js);
 
-						wp_clear_scheduled_hook('compress_js', array($full_path) );
-						wp_schedule_single_event( time(), 'compress_js', array($full_path) );
+						if(function_exists('exec')) {
+							wp_clear_scheduled_hook('compress_js', array($full_path) );
+							wp_schedule_single_event( time(), 'compress_js', array($full_path) );
+						} else {
+							file_put_contents($full_path.'.log', date('c')." - UNABLE TO COMPRESS (PHP exec not available)\n",FILE_APPEND);
+						}
 					}
 					
 					if(file_exists(WP_CONTENT_DIR.$min_path)) {
@@ -317,8 +331,12 @@ class MergeMinifyRefresh {
 	
 					file_put_contents($full_path , $js);
 					
-					wp_clear_scheduled_hook('compress_js', array($full_path));
-					wp_schedule_single_event( time(), 'compress_js', array($full_path) );
+					if(function_exists('exec')) {
+						wp_clear_scheduled_hook('compress_js', array($full_path));
+						wp_schedule_single_event( time(), 'compress_js', array($full_path) );
+					} else {
+						file_put_contents($full_path.'.log', date('c')." - UNABLE TO COMPRESS (PHP exec not available)\n",FILE_APPEND);
+					}
 
 				}
 				
@@ -432,8 +450,14 @@ class MergeMinifyRefresh {
 		
 						file_put_contents($full_path , $css);
 						
-						wp_clear_scheduled_hook('compress_css', array($full_path) );
-						wp_schedule_single_event( time(), 'compress_css', array($full_path) );
+						
+						
+						if(function_exists('exec')) {
+							wp_clear_scheduled_hook('compress_css', array($full_path) );
+							wp_schedule_single_event( time(), 'compress_css', array($full_path) );
+						} else {
+							file_put_contents($full_path.'.log', date('c')." - UNABLE TO COMPRESS (PHP exec not available)\n",FILE_APPEND);
+						}
 					}
 					
 					if(file_exists(WP_CONTENT_DIR.$min_path)) {
