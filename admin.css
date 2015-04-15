@@ -1,0 +1,41 @@
+#merge-minify-refresh {
+	margin-right: 10px;
+}
+#processed {
+	border-top: 1px solid #ccc;
+}
+#processed li {
+	border-bottom: 1px solid #ccc;
+	padding:10px 0;
+}
+#processed li .filename {
+	font-family: monospace;
+	display: block;
+	word-wrap: break-word;
+	margin-bottom: 10px;
+}
+#processed li a {
+	margin-right: 10px;
+}
+#processed pre {
+	border:1px dotted #999;
+	padding:10px;
+	margin:10px 0;
+	background: #EEE;
+	max-height: 300px;
+	overflow: auto;
+}
+
+@media screen and (min-width:782px) {
+	#processed li .filename {
+		min-width: 450px;
+		display: inline-block;
+		margin-bottom: 0;
+	}
+	#merge-minify-refresh {
+		margin-right: 20px;
+	}
+	#processed pre {
+		margin-left:20px;
+	}
+}
