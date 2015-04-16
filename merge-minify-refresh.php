@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: http://launchinteractive.com.au/wordpress/min.zip
  * Description: 
- * Version: 0.2
+ * Version: 0.3
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -27,6 +27,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 //TODO:
 //ability to prevent merging/compressing certain files
+//store files date last access so admin can see old files
 
 class MergeMinifyRefresh {
 	
@@ -107,6 +108,8 @@ class MergeMinifyRefresh {
 	  if ( !current_user_can( 'manage_options' ) )  {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
+		
+		//echo '<pre>'; print_r( _get_cron_array() ); echo '</pre>';
 
 		$files = glob(WP_CONTENT_DIR.'/mmr/*.{js,css}', GLOB_BRACE);
 		
@@ -232,12 +235,9 @@ class MergeMinifyRefresh {
 					
 					$min_path = '/mmr/'.$hash.'-'.$header[$i]['modified'].'.min.js';
 					
-					if(!file_exists($full_path) && !file_exists(WP_CONTENT_DIR.$min_path)) {
-						
-						touch($full_path);
-	
-						//remove existing files
-						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*'));
+					$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
+					
+					if(!file_exists($full_path) && !$min_exists) {
 	
 						$js = '';
 						
@@ -258,9 +258,12 @@ class MergeMinifyRefresh {
 		
 						endforeach;
 						
-						file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
-		
+						//remove existing expired files
+						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*'));
+						
 						file_put_contents($full_path , $js);
+						
+						file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
 
 						if(function_exists('exec')) {
 							wp_clear_scheduled_hook('compress_js', array($full_path) );
@@ -270,7 +273,7 @@ class MergeMinifyRefresh {
 						}
 					}
 					
-					if(file_exists(WP_CONTENT_DIR.$min_path)) {
+					if($min_exists) {
 						wp_register_script('header-'.$i, WP_CONTENT_URL.$min_path);
 					} else {
 						wp_register_script('header-'.$i, WP_CONTENT_URL.$file_path);
@@ -303,11 +306,10 @@ class MergeMinifyRefresh {
 				
 				$min_path = '/mmr/'.$hash.'-'.$footer[$i]['modified'].'.min.js';
 				
-				if(!file_exists($full_path) && !file_exists(WP_CONTENT_DIR.$min_path)) {
-					
-					//remove existing files
-					array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*'));
-					
+				$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
+				
+				if(!file_exists($full_path) && !$min_exists) {
+
 					$js = '';
 					
 					$log = "";
@@ -327,9 +329,12 @@ class MergeMinifyRefresh {
 	
 					endforeach;
 					
-					file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
-	
+					//remove existing expired files
+					array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*'));
+
 					file_put_contents($full_path , $js);
+					
+					file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
 					
 					if(function_exists('exec')) {
 						wp_clear_scheduled_hook('compress_js', array($full_path));
@@ -340,7 +345,7 @@ class MergeMinifyRefresh {
 
 				}
 				
-				if(file_exists(WP_CONTENT_DIR.$min_path)) {
+				if($min_exists) {
 					wp_register_script('footer-'.$i, WP_CONTENT_URL.$min_path, false, false, true);
 				} else {
 					wp_register_script('footer-'.$i, WP_CONTENT_URL.$file_path, false, false, true);
@@ -419,10 +424,9 @@ class MergeMinifyRefresh {
 					
 					$min_path = '/mmr/'.$hash.'-'.$header[$i]['modified'].'.min.css';
 					
-					if(!file_exists($full_path) && !file_exists(WP_CONTENT_DIR.$min_path)) {
-	
-						//remove existing files
-						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*'));
+					$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
+					
+					if(!file_exists($full_path) && !$min_exists) {
 
 						$css = '';
 						
@@ -446,12 +450,13 @@ class MergeMinifyRefresh {
 		
 						endforeach;
 						
-						file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
-		
+						//remove existing out of date files
+						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*'));
+
 						file_put_contents($full_path , $css);
 						
-						
-						
+						file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
+
 						if(function_exists('exec')) {
 							wp_clear_scheduled_hook('compress_css', array($full_path) );
 							wp_schedule_single_event( time(), 'compress_css', array($full_path) );
@@ -460,7 +465,7 @@ class MergeMinifyRefresh {
 						}
 					}
 					
-					if(file_exists(WP_CONTENT_DIR.$min_path)) {
+					if($min_exists) {
 						wp_register_style('header-'.$i, WP_CONTENT_URL.$min_path,false,false,$header[$i]['media']);
 					} else {
 						wp_register_style('header-'.$i, WP_CONTENT_URL.$file_path,false,false,$header[$i]['media']);
@@ -490,10 +495,18 @@ class MergeMinifyRefresh {
 			exec($cmd . ' 2>&1', $output);
 			
 			if(count($output) == 0) {
-				unlink($full_path);
 				rename($full_path.'.tmp',str_replace('.css','.min.css',$full_path));
+				unlink($full_path);
 				$file_size_after = filesize($full_path);
 				file_put_contents($full_path.'.log', date('c')." - COMPRESSION COMPLETE - ".$this->human_filesize($file_size_before-$file_size_after)." saved\n",FILE_APPEND);
+			} else {
+				ob_start();
+				var_dump($output);
+				$error=ob_get_contents();
+				ob_end_clean();
+				
+				file_put_contents($full_path.'.log', date('c')." - COMPRESSION FAILED\n".$error,FILE_APPEND);
+				unlink($full_path.'.tmp');
 			}
 		}
 	}
@@ -510,8 +523,8 @@ class MergeMinifyRefresh {
 			exec($cmd . ' 2>&1', $output);
 			
 			if(count($output) == 0) {
-				unlink($full_path);
 				rename($full_path.'.tmp',str_replace('.js','.min.js',$full_path));
+				unlink($full_path);
 				$file_size_after = filesize($full_path);
 				file_put_contents($full_path.'.log', date('c')." - COMPRESSION COMPLETE - ".$this->human_filesize($file_size_before-$file_size_after)." saved\n",FILE_APPEND);
 			} else {
