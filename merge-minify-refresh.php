@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: http://launchinteractive.com.au/wordpress/min.zip
  * Description: 
- * Version: 0.3
+ * Version: 0.4
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -444,7 +444,7 @@ class MergeMinifyRefresh {
 							$css_contents = preg_replace("/^\xEF\xBB\xBF/", '', $css_contents);
 							
 							//convert relative paths to absolute & ignore data: or absolute paths (starts with /)
-							$css_contents =preg_replace("/url\(\s*['\"]?(?!data:)(?![\/'\"])(.+?)['\"]?\s*\)/i", "url(".dirname($style_path['path'])."/$1)", $css_contents);
+							$css_contents =preg_replace("/url\(\s*['\"]?(?!data:)(?!http)(?![\/'\"])(.+?)['\"]?\s*\)/i", "url(".dirname($style_path['path'])."/$1)", $css_contents);
 							
 							$css .= $css_contents . "\n";
 		
