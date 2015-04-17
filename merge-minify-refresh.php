@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: http://launchinteractive.com.au/wordpress/min.zip
  * Description: 
- * Version: 0.4
+ * Version: 0.5
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -32,12 +32,15 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 class MergeMinifyRefresh {
 	
 	private $host = '';
+	private $root = '';
 
   public function __construct() {
     
     if(!is_dir(WP_CONTENT_DIR.'/mmr')) {
 			mkdir(WP_CONTENT_DIR.'/mmr');
 		}
+		
+		$this->root = untrailingslashit(ABSPATH);
     
     if(is_admin()) {
 	    
@@ -154,8 +157,8 @@ class MergeMinifyRefresh {
 		if( empty($url) ) {
 			return false;
 		}
-		
-		if(mb_substr($url, 0, 4) !== 'http') $url = 'http:' . $url;
+
+		$url = $this->ensure_scheme($url);
 
 		$url_host = parse_url( $url, PHP_URL_HOST );
 		
@@ -164,6 +167,11 @@ class MergeMinifyRefresh {
 		} else {
 			return false;
 		}
+	}
+	
+	//php < 5.4.7 parse_url returns null if host without scheme entered
+	private function ensure_scheme($url) {
+		return preg_replace("/(http(s)?:\/\/|\/\/)(.*)/i", "http$2://$3", $url);
 	}
   
   public function inspect_scripts() {
@@ -180,11 +188,9 @@ class MergeMinifyRefresh {
     // Loop through queue and determine groups of handles & latest modified date
     foreach( $scripts->to_do as $handle ) :
     
-    	$script_path = parse_url($wp_scripts->registered[$handle]->src);
+    	$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
     	
     	$is_footer = isset($wp_scripts->registered[$handle]->extra['group']);
-    	
-    	
     	
     	$array = ($is_footer ? 'footer' : 'header');
 
@@ -198,8 +204,12 @@ class MergeMinifyRefresh {
 		    if(isset($wp_scripts->registered[$handle]->extra['data'])) {
 					${$array}[count(${$array})-1]['data'] .= $wp_scripts->registered[$handle]->extra['data'];
 				}
-
-		  	$modified = filemtime($_SERVER['DOCUMENT_ROOT'].$script_path['path']);
+				
+				$modified = 0;
+				
+				if(is_file($this->root.$script_path['path'])) {
+					$modified = filemtime($this->root.$script_path['path']);
+				}
 
 			  array_push(${$array}[count(${$array})-1]['handles'], $handle);
 
@@ -208,9 +218,6 @@ class MergeMinifyRefresh {
 		   	}
 		    
 		  } else { //external script
-
-				//var_dump($wp_scripts->registered[$handle]);
-				//var_dump($footer);
 
 				array_push(${$array}, array('handle'=>$handle,'data'=>''));
 
@@ -247,9 +254,9 @@ class MergeMinifyRefresh {
 						
 							$log .= " - ".$handle." - ".$wp_scripts->registered[$handle]->src."\n";
 		
-							$script_path = parse_url($wp_scripts->registered[$handle]->src);
+							$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
 							
-							$contents = file_get_contents($_SERVER['DOCUMENT_ROOT'].$script_path['path']);
+							$contents = file_get_contents($this->root.$script_path['path']);
 							
 							// Remove the BOM
 							$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
@@ -318,9 +325,9 @@ class MergeMinifyRefresh {
 					
 						$log .= " - ".$handle." - ".$wp_scripts->registered[$handle]->src."\n";
 	
-						$script_path = parse_url($wp_scripts->registered[$handle]->src);
+						$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
 						
-						$contents = file_get_contents($_SERVER['DOCUMENT_ROOT'].$script_path['path']);
+						$contents = file_get_contents($this->root.$script_path['path']);
 						
 						// Remove the BOM
 						$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
@@ -380,7 +387,7 @@ class MergeMinifyRefresh {
     // Loop through queue and determine groups of handles & latest modified date
     foreach( $styles->to_do as $handle ) :
     
-    	$style_path = parse_url($wp_styles->registered[$handle]->src);
+    	$style_path = parse_url($this->ensure_scheme($wp_styles->registered[$handle]->src));
 
 	    if( $this->host_match($wp_styles->registered[$handle]->src) ) { //is a local script
 
@@ -392,7 +399,11 @@ class MergeMinifyRefresh {
 		    
 		    $media_type = $wp_styles->registered[$handle]->args;
 
-		  	$modified = filemtime($_SERVER['DOCUMENT_ROOT'].$style_path['path']);
+				$modified = 0;
+				
+				if(is_file($this->root.$style_path['path'])) {
+					$modified = filemtime($this->root.$style_path['path']);
+				}
 
 			  array_push($header[count($header)-1]['handles'], $handle);
 
@@ -434,11 +445,11 @@ class MergeMinifyRefresh {
 
 						foreach( $header[$i]['handles'] as $handle ) :
 
-							$style_path = parse_url($wp_styles->registered[$handle]->src);
+							$style_path = parse_url($this->ensure_scheme($wp_styles->registered[$handle]->src));
 							
 							$log .= " - ".$handle." - ".$wp_styles->registered[$handle]->src."\n";
 							
-							$css_contents = file_get_contents($_SERVER['DOCUMENT_ROOT'].$style_path['path']);
+							$css_contents = file_get_contents($this->root.$style_path['path']);
 							
 							// Remove the BOM
 							$css_contents = preg_replace("/^\xEF\xBB\xBF/", '', $css_contents);

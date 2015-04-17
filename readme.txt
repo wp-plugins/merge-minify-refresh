@@ -38,6 +38,10 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 0.5 =
+* Ensure file paths are absolute
+* Use ABSPATH instead of DOCUMENT_ROOT
+
 = 0.4 =
 * Ignore CSS url paths that start with http
 
