@@ -38,6 +38,11 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 0.6 =
+* Remove Javascript String Continuations
+* Show queued scripts/css in admin
+* Prevent YUI Compressor stripping 0 second units (minified transitions now work)
+
 = 0.5 =
 * Ensure file paths are absolute
 * Use ABSPATH instead of DOCUMENT_ROOT

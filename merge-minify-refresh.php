@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: http://launchinteractive.com.au/wordpress/min.zip
  * Description: 
- * Version: 0.5
+ * Version: 0.6
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -60,8 +60,8 @@ class MergeMinifyRefresh {
 	    add_action( 'compress_css',array($this,'compress_css_action'), 10, 1 );
 			add_action( 'compress_js', array($this,'compress_js_action'), 10, 1 );
 	    
-    	add_action( 'wp_print_scripts', array($this,'inspect_scripts'), 100 );
-    	add_action( 'wp_print_styles', array($this,'inspect_styles'), 100 );
+    	add_action( 'wp_print_scripts', array($this,'inspect_scripts'), PHP_INT_MAX );
+    	add_action( 'wp_print_styles', array($this,'inspect_styles'), PHP_INT_MAX );
     	
     	add_filter( 'style_loader_src', array($this,'remove_cssjs_ver'), 10, 2 );
 			add_filter( 'script_loader_src', array($this,'remove_cssjs_ver'), 10, 2 );
@@ -112,7 +112,9 @@ class MergeMinifyRefresh {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
 		
-		//echo '<pre>'; print_r( _get_cron_array() ); echo '</pre>';
+
+		
+		//echo '<pre>';var_dump(_get_cron_array()); echo '</pre>';
 
 		$files = glob(WP_CONTENT_DIR.'/mmr/*.{js,css}', GLOB_BRACE);
 		
@@ -124,16 +126,43 @@ class MergeMinifyRefresh {
 			
 			echo '<a href="?page=merge-minify-refresh&purge=all" class="button button-secondary">Purge All</a>';
 			
-			echo '<p>The following files have been processed:</p>';
+			echo '<h4>The following Javascript files have been processed:</h4>';
 			
 			
-			echo '<ul id="processed">';
+			echo '<ul class="processed">';
+			
+			$css = null;
 			
 			foreach($files as $file) {
 				$ext = pathinfo($file, PATHINFO_EXTENSION);
+				
+				
+				
+				if($css == null && $ext == 'css') {
+					echo '</ul><h4>The following CSS files have been processed:</h4><ul class="processed">';
+					$css = true;
+				}
+				
 				if(in_array($ext, array('js','css'))) {
-
-					echo '<li><span class="filename">'.basename($file).'</span> <a href="#" class="log button button-primary">View Log</a> <a href="?page=merge-minify-refresh&purge='.basename($file).'" class="button button-secondary">Purge</a><pre>'.file_get_contents(preg_replace('/(.*).min.(js|css)$/','$1.$2',$file).'.log').'</pre></li>';
+					
+					$scheduled = '';
+					
+					if($ext == 'css' && substr($file, -8) != '.min.css' || $ext == 'js' && substr($file, -7) != '.min.js') {
+						$schedule = wp_next_scheduled( 'compress_'.$ext, array($file) );
+						
+						if($schedule !== false) {
+							$scheduled = ' <span class="dashicons dashicons-clock" title="Compression Scheduled"></span>';
+						}
+					}
+					
+					$log = file_get_contents(preg_replace('/(.*).min.(js|css)$/','$1.$2',$file).'.log');
+					
+					$error = '';
+					if(strpos($log,'COMPRESSION FAILED') !== false) {
+						$error = ' error';
+					}
+					
+					echo '<li><span class="filename'.$error.'">'.basename($file).$scheduled.'</span> <a href="#" class="log button button-primary">View Log</a> <a href="?page=merge-minify-refresh&purge='.basename($file).'" class="button button-secondary">Purge</a><pre>'.$log.'</pre></li>';
 					
 				}
 			}
@@ -172,6 +201,18 @@ class MergeMinifyRefresh {
 	//php < 5.4.7 parse_url returns null if host without scheme entered
 	private function ensure_scheme($url) {
 		return preg_replace("/(http(s)?:\/\/|\/\/)(.*)/i", "http$2://$3", $url);
+	}
+	
+	private function remove_continuations($js) {
+		return preg_replace_callback(
+	    '#//[^\\r\\n]*|/\\*.*?\\*/|("(?:\\\\.|[^\\\\"])*"|\'(?:\\\\.|[^\\\\\'])*\')#s',
+	    function($matches) {
+		    $str = $matches[1];
+		    if (empty($str)) return $matches[0];
+		    return preg_replace('#\\\\(?:\\r\\n?|\\n)#', '', $str);
+			},
+	    $js
+		);
 	}
   
   public function inspect_scripts() {
@@ -258,6 +299,12 @@ class MergeMinifyRefresh {
 							
 							$contents = file_get_contents($this->root.$script_path['path']);
 							
+							// Remove Javascript String Continuations
+							//$contents = preg_replace("/['|\"].[^'|^\"]*(\\r?\n|\r).[^'|^\"]*['|\"]/", "", $contents);
+							//$contents = preg_replace("/\\r?\n|\r/", '', $contents);
+							
+							$contents = $this->remove_continuations($contents);
+							
 							// Remove the BOM
 							$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
 							
@@ -328,6 +375,11 @@ class MergeMinifyRefresh {
 						$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
 						
 						$contents = file_get_contents($this->root.$script_path['path']);
+						
+						// Remove Javascript String Continuations
+						//$contents = preg_replace("/['|\"].[^'|^\"]*(\\r?\n|\r).[^'|^\"]*['|\"]/", "", $contents);
+						//$contents = preg_replace("/\\r?\n|\r/", '', $contents);
+						$contents = $this->remove_continuations($contents);
 						
 						// Remove the BOM
 						$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
@@ -453,6 +505,9 @@ class MergeMinifyRefresh {
 							
 							// Remove the BOM
 							$css_contents = preg_replace("/^\xEF\xBB\xBF/", '', $css_contents);
+							
+							// prevent YUI Compressor stripping 0 second units
+							$css_contents = str_replace(' 0s', ' .00s', $css_contents);
 							
 							//convert relative paths to absolute & ignore data: or absolute paths (starts with /)
 							$css_contents =preg_replace("/url\(\s*['\"]?(?!data:)(?!http)(?![\/'\"])(.+?)['\"]?\s*\)/i", "url(".dirname($style_path['path'])."/$1)", $css_contents);
