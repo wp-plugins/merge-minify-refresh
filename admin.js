@@ -2,7 +2,7 @@
 	
 	$(function(){
 		
-		$processed = $('#processed');
+		$processed = $('.processed');
 		
 		$('.log', $processed).on('click',function(e){
 			e.preventDefault();

@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
- * Version: 0.6
+ * Version: 0.7
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -158,7 +158,7 @@ class MergeMinifyRefresh {
 					$log = file_get_contents(preg_replace('/(.*).min.(js|css)$/','$1.$2',$file).'.log');
 					
 					$error = '';
-					if(strpos($log,'COMPRESSION FAILED') !== false) {
+					if(strpos($log,'COMPRESSION FAILED') !== false || strpos($log,'UNABLE TO COMPRESS') !== false) {
 						$error = ' error';
 					}
 					

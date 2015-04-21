@@ -38,6 +38,9 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 0.7 =
+* Bugfix
+
 = 0.6 =
 * Remove Javascript String Continuations
 * Show queued scripts/css in admin
