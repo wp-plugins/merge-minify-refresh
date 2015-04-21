@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Merge + Minify + Refresh
- * Plugin URI: http://launchinteractive.com.au/wordpress/min.zip
+ * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
  * Version: 0.6
  * Author: Marc Castles
