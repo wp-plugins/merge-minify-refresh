@@ -38,6 +38,9 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 0.8 =
+* Fix bug when javascript and css has same handle
+
 = 0.7 =
 * Bugfix
 

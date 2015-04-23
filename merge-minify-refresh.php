@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
- * Version: 0.7
+ * Version: 0.8
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -313,7 +313,7 @@ class MergeMinifyRefresh {
 						endforeach;
 						
 						//remove existing expired files
-						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*'));
+						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.js'));
 						
 						file_put_contents($full_path , $js);
 						
@@ -389,7 +389,7 @@ class MergeMinifyRefresh {
 					endforeach;
 					
 					//remove existing expired files
-					array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*'));
+					array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.js'));
 
 					file_put_contents($full_path , $js);
 					
@@ -517,7 +517,7 @@ class MergeMinifyRefresh {
 						endforeach;
 						
 						//remove existing out of date files
-						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*'));
+						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.css'));
 
 						file_put_contents($full_path , $css);
 						
