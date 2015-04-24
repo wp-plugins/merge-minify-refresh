@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
- * Version: 0.8
+ * Version: 0.9
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -111,9 +111,7 @@ class MergeMinifyRefresh {
 	  if ( !current_user_can( 'manage_options' ) )  {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
 		}
-		
 
-		
 		//echo '<pre>';var_dump(_get_cron_array()); echo '</pre>';
 
 		$files = glob(WP_CONTENT_DIR.'/mmr/*.{js,css}', GLOB_BRACE);
@@ -135,9 +133,7 @@ class MergeMinifyRefresh {
 			
 			foreach($files as $file) {
 				$ext = pathinfo($file, PATHINFO_EXTENSION);
-				
-				
-				
+
 				if($css == null && $ext == 'css') {
 					echo '</ul><h4>The following CSS files have been processed:</h4><ul class="processed">';
 					$css = true;
@@ -203,18 +199,24 @@ class MergeMinifyRefresh {
 		return preg_replace("/(http(s)?:\/\/|\/\/)(.*)/i", "http$2://$3", $url);
 	}
 	
+	private function remove_continuations_callback($matches) {
+		if (!isset($matches[1])) {
+			return $matches[0];
+		}
+    return preg_replace('#\\\\(?:\\r\\n?|\\n)#', '', $matches[1]);
+	}
+
+	//Comments could contain quotation-marks, and strings could contain slashes.
 	private function remove_continuations($js) {
+
 		return preg_replace_callback(
 	    '#//[^\\r\\n]*|/\\*.*?\\*/|("(?:\\\\.|[^\\\\"])*"|\'(?:\\\\.|[^\\\\\'])*\')#s',
-	    function($matches) {
-		    $str = $matches[1];
-		    if (empty($str)) return $matches[0];
-		    return preg_replace('#\\\\(?:\\r\\n?|\\n)#', '', $str);
-			},
+	    array($this,'remove_continuations_callback'),
 	    $js
 		);
+
 	}
-  
+
   public function inspect_scripts() {
 
 		global $wp_scripts;
@@ -267,8 +269,6 @@ class MergeMinifyRefresh {
 		  wp_dequeue_script($handle); //dequeue all scripts as we will enqueue in order below
 
 		endforeach;
-		
-		
 
 		//loop through header scripts and merge + schedule wpcron
 		for($i=0,$l=count($header);$i<$l;$i++) {
@@ -284,7 +284,7 @@ class MergeMinifyRefresh {
 					$min_path = '/mmr/'.$hash.'-'.$header[$i]['modified'].'.min.js';
 					
 					$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
-					
+
 					if(!file_exists($full_path) && !$min_exists) {
 	
 						$js = '';
@@ -298,20 +298,14 @@ class MergeMinifyRefresh {
 							$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
 							
 							$contents = file_get_contents($this->root.$script_path['path']);
-							
-							// Remove Javascript String Continuations
-							//$contents = preg_replace("/['|\"].[^'|^\"]*(\\r?\n|\r).[^'|^\"]*['|\"]/", "", $contents);
-							//$contents = preg_replace("/\\r?\n|\r/", '', $contents);
-							
-							$contents = $this->remove_continuations($contents);
-							
+
 							// Remove the BOM
 							$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
 							
 							$js .= $contents . "\n";
 		
 						endforeach;
-						
+
 						//remove existing expired files
 						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.js'));
 						
@@ -326,7 +320,7 @@ class MergeMinifyRefresh {
 							file_put_contents($full_path.'.log', date('c')." - UNABLE TO COMPRESS (PHP exec not available)\n",FILE_APPEND);
 						}
 					}
-					
+
 					if($min_exists) {
 						wp_register_script('header-'.$i, WP_CONTENT_URL.$min_path);
 					} else {
@@ -346,6 +340,7 @@ class MergeMinifyRefresh {
 					
 				}
 		}
+
 		
 		//loop through footer scripts and merge + schedule wpcron
 		for($i=0,$l=count($footer);$i<$l;$i++) {
@@ -375,11 +370,6 @@ class MergeMinifyRefresh {
 						$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
 						
 						$contents = file_get_contents($this->root.$script_path['path']);
-						
-						// Remove Javascript String Continuations
-						//$contents = preg_replace("/['|\"].[^'|^\"]*(\\r?\n|\r).[^'|^\"]*['|\"]/", "", $contents);
-						//$contents = preg_replace("/\\r?\n|\r/", '', $contents);
-						$contents = $this->remove_continuations($contents);
 						
 						// Remove the BOM
 						$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
@@ -505,13 +495,10 @@ class MergeMinifyRefresh {
 							
 							// Remove the BOM
 							$css_contents = preg_replace("/^\xEF\xBB\xBF/", '', $css_contents);
-							
-							// prevent YUI Compressor stripping 0 second units
-							$css_contents = str_replace(' 0s', ' .00s', $css_contents);
-							
+
 							//convert relative paths to absolute & ignore data: or absolute paths (starts with /)
 							$css_contents =preg_replace("/url\(\s*['\"]?(?!data:)(?!http)(?![\/'\"])(.+?)['\"]?\s*\)/i", "url(".dirname($style_path['path'])."/$1)", $css_contents);
-							
+
 							$css .= $css_contents . "\n";
 		
 						endforeach;
@@ -555,6 +542,11 @@ class MergeMinifyRefresh {
 	
 			file_put_contents($full_path.'.log', date('c')." - COMPRESSING CSS\n",FILE_APPEND);
 			
+			$css_contents = file_get_contents($full_path);
+			// prevent YUI Compressor stripping 0 second units
+			$css_contents = str_replace(' 0s', ' .00s', $css_contents);
+			file_put_contents($full_path, $css_contents);
+			
 			$file_size_before = filesize($full_path);
 			
 			$cmd = 'java -jar \''.WP_PLUGIN_DIR.'/merge-minify-refresh/yuicompressor.jar\' \''.$full_path.'\' -o \''.$full_path.'.tmp\'';
@@ -581,6 +573,13 @@ class MergeMinifyRefresh {
 
 		if(is_file($full_path)) {
 			file_put_contents($full_path.'.log', date('c')." - COMPRESSING JS\n",FILE_APPEND);
+			
+			// Remove Javascript String Continuations
+			$contents = file_get_contents($full_path);
+			if(strpos($contents, "\\".PHP_EOL) !== FALSE) { //only remove continuations if they exist
+				$contents = $this->remove_continuations($contents);
+				file_put_contents($full_path, $contents);
+			}
 			
 			$file_size_before = filesize($full_path);
 			
