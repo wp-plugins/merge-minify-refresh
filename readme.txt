@@ -38,6 +38,10 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 1.0 =
+* Don't remove unminified files anymore for rare occasions when css or js return a 404 error
+* Admin now updates automatically.
+
 = 0.9 =
 * Fix issue with scripts failing to compile because of remove_continuations
 

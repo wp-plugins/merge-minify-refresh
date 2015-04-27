@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
- * Version: 0.9
+ * Version: 1.0
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -48,7 +48,7 @@ class MergeMinifyRefresh {
 	    
 	    add_action( 'admin_enqueue_scripts', array($this,'load_admin_styles') );
 	    
-	    add_action( 'admin_init', array($this,'merge_minify_refresh_settings_action') );
+	    add_action( 'wp_ajax_mmr_files', array($this,'mmr_files_callback') );
 	    
 	  } else {
 
@@ -71,6 +71,73 @@ class MergeMinifyRefresh {
     register_deactivation_hook( __FILE__, array($this, 'plugin_deactivate') );
   }
   
+  public function mmr_files_callback() {
+	  
+	  if(isset($_POST['purge']) && $_POST['purge'] == 'all') {
+		  $this->rrmdir(WP_CONTENT_DIR.'/mmr'); 
+	  } else if(isset($_POST['purge'])) {
+		  array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$_POST['purge'].'*'));
+	  }
+	  
+	  
+	  $return = array('js'=>array(),'css'=>array(),'stamp'=>$_POST['stamp']);
+	  
+
+	  $files = glob(WP_CONTENT_DIR.'/mmr/*.{js,css}', GLOB_BRACE);
+
+		if(count($files) > 0) {
+			
+			$css = null;
+			
+			foreach($files as $file) {
+
+				$ext = pathinfo($file, PATHINFO_EXTENSION);
+				
+				if(in_array($ext, array('js','css'))) {
+					//loop over non minified files
+					if($ext == 'css' && substr($file, -8) != '.min.css' || $ext == 'js' && substr($file, -7) != '.min.js') {
+
+						$scheduled = false;
+
+						if(wp_next_scheduled( 'compress_'.$ext, array($file) ) !== false) {
+							$scheduled = true;
+						}
+
+						$log = file_get_contents($file.'.log');
+						
+						$error = false;
+						if(strpos($log,'COMPRESSION FAILED') !== false || strpos($log,'UNABLE TO COMPRESS') !== false) {
+							$error = true;
+						}
+						
+						$mincss = substr($file,0,-4).'.min.css';
+						$minjs = substr($file,0,-3).'.min.js';
+						
+						$filename = basename($file);
+						if($ext == 'css' && file_exists($mincss)) {
+							$filename = basename($mincss);
+						}
+						if($ext == 'js' && file_exists($minjs)) {
+							$filename = basename($minjs);
+						}
+						
+						$hash = substr($filename,0,strpos($filename,'-'));
+						
+						array_push($return[$ext], array('hash'=>$hash,'filename'=>$filename,'scheduled'=>$scheduled,'log'=>$log, 'error'=>$error) );
+							
+					}
+				}
+			}
+			
+
+		}
+
+		header('Content-Type: application/json');
+	  echo json_encode($return);
+
+		wp_die(); // this is required to terminate immediately and return a proper response
+	}
+  
   public function plugin_deactivate() {
 	  if(is_dir(WP_CONTENT_DIR.'/mmr')) {
 			$this->rrmdir(WP_CONTENT_DIR.'/mmr'); 
@@ -78,35 +145,21 @@ class MergeMinifyRefresh {
   }
   
   private function rrmdir($dir) { 
-	  foreach(glob($dir . '/*') as $file) { 
-	    if(is_dir($file)) rrmdir($file); else unlink($file); 
+	  foreach(glob($dir.'/{,.}*', GLOB_BRACE) as $file) { 
+		  if(basename($file) != '.' && basename($file) != '..') {
+	    	if(is_dir($file)) $this->rrmdir($file); else unlink($file); 
+	    }
 	  } rmdir($dir); 
 	}
   
   public function load_admin_styles() {
     wp_enqueue_style( 'merge-minify-refresh', plugins_url('admin.css', __FILE__) );
-    wp_enqueue_script( 'merge-minify-refresh', plugins_url('admin.js', __FILE__) );
+    wp_enqueue_script( 'merge-minify-refresh', plugins_url('admin.js', __FILE__), array(), false, true );
   }
   
   public function admin_menu() {
 	  add_options_page( 'Merge + Minify + Refresh Settings', 'Merge + Minify + Refresh', 'manage_options', 'merge-minify-refresh', array($this,'merge_minify_refresh_settings') );
   }
-  public function merge_minify_refresh_settings_action() {
-	  if(isset($_GET['page'],$_GET['purge']) && $_GET['page']=='merge-minify-refresh') {
-			if($_GET['purge'] == 'all') {
-				$this->rrmdir(WP_CONTENT_DIR.'/mmr'); 
-			} else {
-				if(is_file(WP_CONTENT_DIR.'/mmr/'.$_GET['purge'])) {
-					unlink(WP_CONTENT_DIR.'/mmr/'.$_GET['purge']);
-				}
-				if(is_file(WP_CONTENT_DIR.'/mmr/'.$_GET['purge'].'.log')) {
-					unlink(WP_CONTENT_DIR.'/mmr/'.$_GET['purge'].'.log');
-				}
-			}
-			wp_redirect( 'options-general.php?page=merge-minify-refresh' );
-			exit;
-		}
-	}
   public function merge_minify_refresh_settings() {
 	  if ( !current_user_can( 'manage_options' ) )  {
 			wp_die( __( 'You do not have sufficient permissions to access this page.' ) );
@@ -120,54 +173,24 @@ class MergeMinifyRefresh {
 		
 		echo '<p>When a CSS or JS file is modified MMR will automatically re-process the files. However, when a dependancy changes these files may become stale.</p>';
 		
-		if(count($files) > 0) {
-			
-			echo '<a href="?page=merge-minify-refresh&purge=all" class="button button-secondary">Purge All</a>';
-			
-			echo '<h4>The following Javascript files have been processed:</h4>';
-			
-			
-			echo '<ul class="processed">';
-			
-			$css = null;
-			
-			foreach($files as $file) {
-				$ext = pathinfo($file, PATHINFO_EXTENSION);
-
-				if($css == null && $ext == 'css') {
-					echo '</ul><h4>The following CSS files have been processed:</h4><ul class="processed">';
-					$css = true;
-				}
-				
-				if(in_array($ext, array('js','css'))) {
-					
-					$scheduled = '';
-					
-					if($ext == 'css' && substr($file, -8) != '.min.css' || $ext == 'js' && substr($file, -7) != '.min.js') {
-						$schedule = wp_next_scheduled( 'compress_'.$ext, array($file) );
-						
-						if($schedule !== false) {
-							$scheduled = ' <span class="dashicons dashicons-clock" title="Compression Scheduled"></span>';
-						}
-					}
-					
-					$log = file_get_contents(preg_replace('/(.*).min.(js|css)$/','$1.$2',$file).'.log');
-					
-					$error = '';
-					if(strpos($log,'COMPRESSION FAILED') !== false || strpos($log,'UNABLE TO COMPRESS') !== false) {
-						$error = ' error';
-					}
-					
-					echo '<li><span class="filename'.$error.'">'.basename($file).$scheduled.'</span> <a href="#" class="log button button-primary">View Log</a> <a href="?page=merge-minify-refresh&purge='.basename($file).'" class="button button-secondary">Purge</a><pre>'.$log.'</pre></li>';
-					
-				}
-			}
-			
-			echo '</ul>';
-		} else {
-			echo '<p><strong>No files have been processed</strong></p>';
-		}
 		
+		echo '<div id="mmr_processed">
+						<a href="#" class="button button-secondary purgeall">Purge All</a>
+						
+						<div id="mmr_jsprocessed">
+							<h4>The following Javascript files have been processed:</h4>
+							<ul class="processed"></ul>
+						</div>
+						
+						<div id="mmr_cssprocessed">
+							<h4>The following CSS files have been processed:</h4>
+							<ul class="processed"></ul>
+						</div>
+					</div>
+					
+					<p id="mmr_noprocessed"><strong>No files have been processed</strong></p>
+					';
+
 		echo '</div>';
 		
   }
@@ -541,21 +564,21 @@ class MergeMinifyRefresh {
 		if(is_file($full_path)) {
 	
 			file_put_contents($full_path.'.log', date('c')." - COMPRESSING CSS\n",FILE_APPEND);
+
+			$file_size_before = filesize($full_path);
 			
 			$css_contents = file_get_contents($full_path);
 			// prevent YUI Compressor stripping 0 second units
 			$css_contents = str_replace(' 0s', ' .00s', $css_contents);
 			file_put_contents($full_path, $css_contents);
 			
-			$file_size_before = filesize($full_path);
-			
 			$cmd = 'java -jar \''.WP_PLUGIN_DIR.'/merge-minify-refresh/yuicompressor.jar\' \''.$full_path.'\' -o \''.$full_path.'.tmp\'';
 			exec($cmd . ' 2>&1', $output);
 			
 			if(count($output) == 0) {
-				rename($full_path.'.tmp',str_replace('.css','.min.css',$full_path));
-				unlink($full_path);
-				$file_size_after = filesize($full_path);
+				$min_path = str_replace('.css','.min.css',$full_path);
+				rename($full_path.'.tmp',$min_path);
+				$file_size_after = filesize($min_path);
 				file_put_contents($full_path.'.log', date('c')." - COMPRESSION COMPLETE - ".$this->human_filesize($file_size_before-$file_size_after)." saved\n",FILE_APPEND);
 			} else {
 				ob_start();
@@ -573,7 +596,9 @@ class MergeMinifyRefresh {
 
 		if(is_file($full_path)) {
 			file_put_contents($full_path.'.log', date('c')." - COMPRESSING JS\n",FILE_APPEND);
-			
+
+			$file_size_before = filesize($full_path);
+
 			// Remove Javascript String Continuations
 			$contents = file_get_contents($full_path);
 			if(strpos($contents, "\\".PHP_EOL) !== FALSE) { //only remove continuations if they exist
@@ -581,16 +606,14 @@ class MergeMinifyRefresh {
 				file_put_contents($full_path, $contents);
 			}
 			
-			$file_size_before = filesize($full_path);
-			
 			$cmd = 'java -jar \''.WP_PLUGIN_DIR.'/merge-minify-refresh/closure-compiler.jar\' --warning_level QUIET --js \''.$full_path.'\' --js_output_file \''.$full_path.'.tmp\'';
 		
 			exec($cmd . ' 2>&1', $output);
-			
+
 			if(count($output) == 0) {
-				rename($full_path.'.tmp',str_replace('.js','.min.js',$full_path));
-				unlink($full_path);
-				$file_size_after = filesize($full_path);
+				$min_path = str_replace('.js','.min.js',$full_path);
+				rename($full_path.'.tmp',$min_path);
+				$file_size_after = filesize($min_path);
 				file_put_contents($full_path.'.log', date('c')." - COMPRESSION COMPLETE - ".$this->human_filesize($file_size_before-$file_size_after)." saved\n",FILE_APPEND);
 			} else {
 				
