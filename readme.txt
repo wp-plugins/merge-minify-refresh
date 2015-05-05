@@ -12,9 +12,11 @@ Merges/Concatenates CSS & Javascript and then minifies using yuicompressor (for 
 
 == Description ==
 
-This plugin merges/concatenates Cascading Style Sheets & Javascript files into groups. It then minifies the generated files using yuicompressor (for CSS) and Google Closure (for JS). Minification is done via WP-Cron so that it doesn't slow down the website. When JS or CSS changes files are re-processed. No need to empty cache!
+This plugin merges/concatenates Cascading Style Sheets & Javascript files into groups. It then minifies the generated files using Minify (for CSS) and Google Closure (for JS - fallback to Minify when not available). Minification is done via WP-Cron so that it doesn't slow down the website. When JS or CSS changes files are re-processed. No need to empty cache!
 
 Inspired by [MinQueue](https://wordpress.org/plugins/minqueue/) and [Dependency Minification](https://wordpress.org/plugins/dependency-minification) plugins.
+
+Minification by [Minify](https://github.com/matthiasmullie/minify) and [Google Closure](https://developers.google.com/closure/)
 
 In order to ensure fast loading times its recommended to set long expiry dates for CSS and JS as well as make sure gzip or deflate is on.
 
@@ -24,8 +26,8 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 *	Handles scripts loaded in the header & footer
 *	Compatable with localized scripts
 *	Creates WP-Cron for minification as this can take some time to complete
-*	Minifies JS with Google Closure (requires php exec)
-*	Minifies CSS with YUICompressor (requires php exec)
+*	Minifies JS with Google Closure (requires php exec) with fallback to Minify
+*	Minifies CSS with Minify
 *	Failed minification doesn't break the site. Visitors will instead only see the merged results
 *	Stores Assets in /wp-content/mmr/ folder
 *	Uses last modified date in filename so any changes to JS or CSS automatically get re-processed and downloaded on browser refresh
@@ -37,6 +39,11 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 2. Activate the plugin through the 'Plugins' menu in WordPress
 
 == Changelog ==
+
+= 1.1 =
+* Only write admin ajax response when it has changed
+* CSS now compressed using Minify
+* JS compressed with Minify when Closure not available
 
 = 1.0 =
 * Don't remove unminified files anymore for rare occasions when css or js return a 404 error

@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
- * Version: 1.0
+ * Version: 1.1
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -25,9 +25,13 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-//TODO:
-//ability to prevent merging/compressing certain files
-//store files date last access so admin can see old files
+
+require_once('Minify/Minify.php');
+require_once('Minify/CSS.php');
+require_once('Minify/Converter.php');
+require_once('Minify/Exception.php');
+require_once('Minify/JS.php');
+
 
 class MergeMinifyRefresh {
 	
@@ -408,12 +412,8 @@ class MergeMinifyRefresh {
 					
 					file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
 					
-					if(function_exists('exec')) {
-						wp_clear_scheduled_hook('compress_js', array($full_path));
-						wp_schedule_single_event( time(), 'compress_js', array($full_path) );
-					} else {
-						file_put_contents($full_path.'.log', date('c')." - UNABLE TO COMPRESS (PHP exec not available)\n",FILE_APPEND);
-					}
+					wp_clear_scheduled_hook('compress_js', array($full_path));
+					wp_schedule_single_event( time(), 'compress_js', array($full_path) );
 
 				}
 				
@@ -567,63 +567,69 @@ class MergeMinifyRefresh {
 
 			$file_size_before = filesize($full_path);
 			
-			$css_contents = file_get_contents($full_path);
-			// prevent YUI Compressor stripping 0 second units
-			$css_contents = str_replace(' 0s', ' .00s', $css_contents);
-			file_put_contents($full_path, $css_contents);
+			$minifier = new MatthiasMullie\Minify\CSS($full_path);
 			
-			$cmd = 'java -jar \''.WP_PLUGIN_DIR.'/merge-minify-refresh/yuicompressor.jar\' \''.$full_path.'\' -o \''.$full_path.'.tmp\'';
-			exec($cmd . ' 2>&1', $output);
+			$min_path = str_replace('.css','.min.css',$full_path);
 			
-			if(count($output) == 0) {
-				$min_path = str_replace('.css','.min.css',$full_path);
-				rename($full_path.'.tmp',$min_path);
-				$file_size_after = filesize($min_path);
-				file_put_contents($full_path.'.log', date('c')." - COMPRESSION COMPLETE - ".$this->human_filesize($file_size_before-$file_size_after)." saved\n",FILE_APPEND);
-			} else {
-				ob_start();
-				var_dump($output);
-				$error=ob_get_contents();
-				ob_end_clean();
-				
-				file_put_contents($full_path.'.log', date('c')." - COMPRESSION FAILED\n".$error,FILE_APPEND);
-				unlink($full_path.'.tmp');
-			}
+			$minifier->minify($min_path);
+			
+			$file_size_after = filesize($min_path);
+			
+			file_put_contents($full_path.'.log', date('c')." - COMPRESSION COMPLETE - ".$this->human_filesize($file_size_before-$file_size_after)." saved\n",FILE_APPEND);
+
 		}
 	}
 	
 	public function compress_js_action($full_path) {
 
 		if(is_file($full_path)) {
-			file_put_contents($full_path.'.log', date('c')." - COMPRESSING JS\n",FILE_APPEND);
+			
 
 			$file_size_before = filesize($full_path);
 
-			// Remove Javascript String Continuations
-			$contents = file_get_contents($full_path);
-			if(strpos($contents, "\\".PHP_EOL) !== FALSE) { //only remove continuations if they exist
-				$contents = $this->remove_continuations($contents);
-				file_put_contents($full_path, $contents);
-			}
+			if(function_exists('exec') && exec('command -v java >/dev/null && echo "yes" || echo "no"') == 'yes') {
+				
+				file_put_contents($full_path.'.log', date('c')." - COMPRESSING JS WITH CLOSURE\n",FILE_APPEND);
+				
+				// Remove Javascript String Continuations
+				$contents = file_get_contents($full_path);
+				if(strpos($contents, "\\".PHP_EOL) !== FALSE) { //only remove continuations if they exist
+					$contents = $this->remove_continuations($contents);
+					file_put_contents($full_path, $contents);
+				}
+				
+				$cmd = 'java -jar \''.WP_PLUGIN_DIR.'/merge-minify-refresh/closure-compiler.jar\' --warning_level QUIET --js \''.$full_path.'\' --js_output_file \''.$full_path.'.tmp\'';
 			
-			$cmd = 'java -jar \''.WP_PLUGIN_DIR.'/merge-minify-refresh/closure-compiler.jar\' --warning_level QUIET --js \''.$full_path.'\' --js_output_file \''.$full_path.'.tmp\'';
-		
-			exec($cmd . ' 2>&1', $output);
-
-			if(count($output) == 0) {
-				$min_path = str_replace('.js','.min.js',$full_path);
-				rename($full_path.'.tmp',$min_path);
-				$file_size_after = filesize($min_path);
-				file_put_contents($full_path.'.log', date('c')." - COMPRESSION COMPLETE - ".$this->human_filesize($file_size_before-$file_size_after)." saved\n",FILE_APPEND);
+				exec($cmd . ' 2>&1', $output);
+	
+				if(count($output) == 0) {
+					$min_path = str_replace('.js','.min.js',$full_path);
+					rename($full_path.'.tmp',$min_path);
+					$file_size_after = filesize($min_path);
+					file_put_contents($full_path.'.log', date('c')." - COMPRESSION COMPLETE - ".$this->human_filesize($file_size_before-$file_size_after)." saved\n",FILE_APPEND);
+				} else {
+					
+					ob_start();
+					var_dump($output);
+					$error=ob_get_contents();
+					ob_end_clean();
+					
+					file_put_contents($full_path.'.log', date('c')." - COMPRESSION FAILED\n".$error,FILE_APPEND);
+					unlink($full_path.'.tmp');
+				}
 			} else {
 				
-				ob_start();
-				var_dump($output);
-				$error=ob_get_contents();
-				ob_end_clean();
+				file_put_contents($full_path.'.log', date('c')." - COMPRESSING WITH MINIFY (PHP exec not available)\n",FILE_APPEND);
 				
-				file_put_contents($full_path.'.log', date('c')." - COMPRESSION FAILED\n".$error,FILE_APPEND);
-				unlink($full_path.'.tmp');
+				$minifier = new MatthiasMullie\Minify\JS($full_path);
+			
+				$min_path = str_replace('.js','.min.js',$full_path);
+				
+				$minifier->minify($min_path);
+				
+				$file_size_after = filesize($min_path);
+				
+				file_put_contents($full_path.'.log', date('c')." - COMPRESSION COMPLETE - ".$this->human_filesize($file_size_before-$file_size_after)." saved\n",FILE_APPEND);
 			}
 		}
 	}

@@ -60,8 +60,12 @@
 							}
 							if($li.length > 0) {
 								var $filename = $li.find('.filename');
-								$filename.html(this.filename+scheduled);
-								$li.find('pre').html(this.log);
+								if($filename.html() != this.filename+scheduled) {
+									$filename.html(this.filename+scheduled);
+								}
+								if($li.find('pre').html() != this.log) {
+									$li.find('pre').html(this.log);
+								}
 								if(this.error) {
 									$filename.addClass('error');
 								} else {
@@ -86,8 +90,12 @@
 							}
 							if($li.length > 0) {
 								var $filename = $li.find('.filename');
-								$filename.html(this.filename+scheduled);
-								$li.find('pre').html(this.log);
+								if($filename.html() != this.filename+scheduled) {
+									$filename.html(this.filename+scheduled);
+								}
+								if($li.find('pre').html() != this.log) {
+									$li.find('pre').html(this.log);
+								}
 								if(this.error) {
 									$filename.addClass('error');
 								} else {
