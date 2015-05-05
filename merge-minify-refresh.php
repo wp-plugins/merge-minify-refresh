@@ -110,7 +110,7 @@ class MergeMinifyRefresh {
 						$log = file_get_contents($file.'.log');
 						
 						$error = false;
-						if(strpos($log,'COMPRESSION FAILED') !== false || strpos($log,'UNABLE TO COMPRESS') !== false) {
+						if(strpos($log,'COMPRESSION FAILED') !== false) {
 							$error = true;
 						}
 						
@@ -528,13 +528,9 @@ class MergeMinifyRefresh {
 						file_put_contents($full_path , $css);
 						
 						file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
-
-						if(function_exists('exec')) {
-							wp_clear_scheduled_hook('compress_css', array($full_path) );
-							wp_schedule_single_event( time(), 'compress_css', array($full_path) );
-						} else {
-							file_put_contents($full_path.'.log', date('c')." - UNABLE TO COMPRESS (PHP exec not available)\n",FILE_APPEND);
-						}
+							
+						wp_clear_scheduled_hook('compress_css', array($full_path) );
+						wp_schedule_single_event( time(), 'compress_css', array($full_path) );
 					}
 					
 					if($min_exists) {
