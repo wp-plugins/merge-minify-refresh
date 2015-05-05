@@ -40,6 +40,9 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 1.2 =
+* Bugfix
+
 = 1.1 =
 * Only write admin ajax response when it has changed
 * CSS now compressed using Minify
