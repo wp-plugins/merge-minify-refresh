@@ -8,7 +8,7 @@ Tested up to: 4.2
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
-Merges/Concatenates CSS & Javascript and then minifies using yuicompressor (for CSS) and Google Closure (for JS).
+Merges/Concatenates CSS & Javascript and then minifies using Minify (for CSS) and Google Closure (for JS with Minify as a fallback).
 
 == Description ==
 
