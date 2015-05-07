@@ -20,7 +20,7 @@ Minification by [Minify](https://github.com/matthiasmullie/minify) and [Google C
 
 In order to ensure fast loading times its recommended to set long expiry dates for CSS and JS as well as make sure gzip or deflate is on.
 
-**Note** Installing this plugin on a server with the eAccellerator module has the potential to break as Minify uses anonymous functions which return NULL. [View eAccellerator Issue Thread](https://github.com/eaccelerator/eaccelerator/issues/12)
+**Note** Installing this plugin on a server with the eAccellerator module installed has the potential to break as Minify uses anonymous functions which return NULL. [View eAccellerator Issue Thread](https://github.com/eaccelerator/eaccelerator/issues/12)
 
 **Features**
 
