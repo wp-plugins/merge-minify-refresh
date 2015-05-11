@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
- * Version: 1.2
+ * Version: 1.3
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -31,7 +31,6 @@ require_once('Minify/CSS.php');
 require_once('Minify/Converter.php');
 require_once('Minify/Exception.php');
 require_once('Minify/JS.php');
-
 
 class MergeMinifyRefresh {
 	
@@ -70,6 +69,7 @@ class MergeMinifyRefresh {
     	add_filter( 'style_loader_src', array($this,'remove_cssjs_ver'), 10, 2 );
 			add_filter( 'script_loader_src', array($this,'remove_cssjs_ver'), 10, 2 );
 
+			add_action( 'wp_footer', array($this,'inspect_stylescripts_footer'), ~PHP_INT_MAX );
     }
     
     register_deactivation_hook( __FILE__, array($this, 'plugin_deactivate') );
@@ -137,7 +137,7 @@ class MergeMinifyRefresh {
 		}
 
 		header('Content-Type: application/json');
-	  echo json_encode($return);
+	  	echo json_encode($return);
 
 		wp_die(); // this is required to terminate immediately and return a proper response
 	}
@@ -244,309 +244,579 @@ class MergeMinifyRefresh {
 
 	}
 
-  public function inspect_scripts() {
+	public function inspect_scripts() {
 
 		global $wp_scripts;
 		
-		$scripts = wp_clone( $wp_scripts );
-    
-    $scripts->all_deps($scripts->queue);
-    
-    $header = array();
-    $footer = array();
-    
-    // Loop through queue and determine groups of handles & latest modified date
-    foreach( $scripts->to_do as $handle ) :
-    
-    	$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
-    	
-    	$is_footer = isset($wp_scripts->registered[$handle]->extra['group']);
-    	
-    	$array = ($is_footer ? 'footer' : 'header');
-
-	    if( $this->host_match($wp_scripts->registered[$handle]->src)) { //is a local script
-
-				if(isset(${$array}[count(${$array})-1]['handle']) || count(${$array}) == 0  ) {
-					array_push(${$array}, array('modified'=>0,'handles'=>array(), 'data'=>''));
-		    }
-
-				//save any data added with wp_localize_script
-		    if(isset($wp_scripts->registered[$handle]->extra['data'])) {
-					${$array}[count(${$array})-1]['data'] .= $wp_scripts->registered[$handle]->extra['data'];
-				}
-				
-				$modified = 0;
-				
-				if(is_file($this->root.$script_path['path'])) {
-					$modified = filemtime($this->root.$script_path['path']);
-				}
-
-			  array_push(${$array}[count(${$array})-1]['handles'], $handle);
-
-		   	if($modified > ${$array}[count(${$array})-1]['modified']) {
-			   	${$array}[count(${$array})-1]['modified'] = $modified;
-		   	}
-		    
-		  } else { //external script
-
-				array_push(${$array}, array('handle'=>$handle,'data'=>''));
-
-		  }
-
-		  wp_dequeue_script($handle); //dequeue all scripts as we will enqueue in order below
-
-		endforeach;
-
-		//loop through header scripts and merge + schedule wpcron
-		for($i=0,$l=count($header);$i<$l;$i++) {
-
-				if(!isset($header[$i]['handle'])) {
-
-					$hash = md5(implode('',$header[$i]['handles']));					
+		if($wp_scripts) {
+		
+			$scripts = wp_clone( $wp_scripts );
+	    
+	    $scripts->all_deps($scripts->queue);
+	    
+	    $header = array();
+	    
+	    // Loop through queue and determine groups of handles & latest modified date
+	    foreach( $scripts->to_do as $handle ) :
+	    
+	    	$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
+	    	
+	    	$is_footer = isset($wp_scripts->registered[$handle]->extra['group']);
+	    	
+	    	if(!$is_footer) { //footer scripts get delt within the inspect_stylescripts_footer action
+		
+			    if( $this->host_match($wp_scripts->registered[$handle]->src)) { //is a local script
+		
+						if(isset($header[count($header)-1]['handle']) || count($header) == 0  ) {
+							array_push($header, array('modified'=>0,'handles'=>array(), 'data'=>''));
+				    }
+		
+						//save any data added with wp_localize_script
+				    if(isset($wp_scripts->registered[$handle]->extra['data'])) {
+							$header[count($header)-1]['data'] .= $wp_scripts->registered[$handle]->extra['data'];
+						}
+						
+						$modified = 0;
+						
+						if(is_file($this->root.$script_path['path'])) {
+							$modified = filemtime($this->root.$script_path['path']);
+						}
+		
+					  array_push($header[count($header)-1]['handles'], $handle);
+		
+				   	if($modified > $header[count($header)-1]['modified']) {
+					   	$header[count($header)-1]['modified'] = $modified;
+				   	}
+				    
+				  } else { //external script
+		
+						array_push($header, array('handle'=>$handle,'data'=>''));
+		
+				  }
+		
+				  wp_dequeue_script($handle); //dequeue all scripts as we will enqueue in order below
+			  
+			  }
+	
+			endforeach;
+			
+			$done = $scripts->done;
+	
+			//loop through header scripts and merge + schedule wpcron
+			for($i=0,$l=count($header);$i<$l;$i++) {
+	
+					if(!isset($header[$i]['handle'])) {
+						
+						$done = array_merge($done, $header[$i]['handles']);
+	
+						$hash = md5(implode('',$header[$i]['handles']));					
+						
+						$file_path = '/mmr/'.$hash.'-'.$header[$i]['modified'].'.js';
+						
+						$full_path = WP_CONTENT_DIR.$file_path;
+						
+						$min_path = '/mmr/'.$hash.'-'.$header[$i]['modified'].'.min.js';
+						
+						$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
+	
+						if(!file_exists($full_path) && !$min_exists) {
+		
+							$js = '';
+							
+							$log = "";
+							
+							foreach( $header[$i]['handles'] as $handle ) :
+							
+								$log .= " - ".$handle." - ".$wp_scripts->registered[$handle]->src."\n";
+			
+								$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
+								
+								$contents = file_get_contents($this->root.$script_path['path']);
+	
+								// Remove the BOM
+								$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
+								
+								$js .= $contents . "\n";
+			
+							endforeach;
+	
+							//remove existing expired files
+							array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.js'));
+							
+							file_put_contents($full_path , $js);
+							
+							file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
+	
+							wp_clear_scheduled_hook('compress_js', array($full_path) );
+							wp_schedule_single_event( time(), 'compress_js', array($full_path) );
+						}
+	
+						if($min_exists) {
+							wp_register_script('header-'.$i, WP_CONTENT_URL.$min_path);
+						} else {
+							wp_register_script('header-'.$i, WP_CONTENT_URL.$file_path);
+						}
+	
+						//set any existing data that was added with wp_localize_script
+						if($header[$i]['data'] != '') {
+							$wp_scripts->registered['header-'.$i]->extra['data'] = $header[$i]['data'];
+						}
+						
+						wp_enqueue_script('header-'.$i);
 					
-					$file_path = '/mmr/'.$hash.'-'.$header[$i]['modified'].'.js';
+					} else { //external
+						
+						wp_enqueue_script($header[$i]['handle']);
+						
+					}
+			}
+	
+			
+			
+			//loop through footer scripts and merge + schedule wpcron
+			for($i=0,$l=count($footer);$i<$l;$i++) {
 					
+				if(!isset($footer[$i]['handle'])) {
+					
+					$done = array_merge($done, $footer[$i]['handles']);
+	
+					$hash = md5(implode('',$footer[$i]['handles']));
+					
+					$file_path = '/mmr/'.$hash.'-'.$footer[$i]['modified'].'.js';
+						
 					$full_path = WP_CONTENT_DIR.$file_path;
 					
-					$min_path = '/mmr/'.$hash.'-'.$header[$i]['modified'].'.min.js';
+					$min_path = '/mmr/'.$hash.'-'.$footer[$i]['modified'].'.min.js';
 					
 					$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
-
+					
 					if(!file_exists($full_path) && !$min_exists) {
-	
+						
 						$js = '';
 						
 						$log = "";
 						
-						foreach( $header[$i]['handles'] as $handle ) :
+						foreach( $footer[$i]['handles'] as $handle ) :
 						
 							$log .= " - ".$handle." - ".$wp_scripts->registered[$handle]->src."\n";
 		
 							$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
 							
 							$contents = file_get_contents($this->root.$script_path['path']);
-
+							
 							// Remove the BOM
 							$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
 							
 							$js .= $contents . "\n";
 		
 						endforeach;
-
+						
 						//remove existing expired files
 						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.js'));
-						
+	
 						file_put_contents($full_path , $js);
 						
 						file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
-
-						wp_clear_scheduled_hook('compress_js', array($full_path) );
+						
+						wp_clear_scheduled_hook('compress_js', array($full_path));
 						wp_schedule_single_event( time(), 'compress_js', array($full_path) );
+	
 					}
-
+					
 					if($min_exists) {
-						wp_register_script('header-'.$i, WP_CONTENT_URL.$min_path);
+						wp_register_script('footer-'.$i, WP_CONTENT_URL.$min_path, false, false, true);
 					} else {
-						wp_register_script('header-'.$i, WP_CONTENT_URL.$file_path);
+						wp_register_script('footer-'.$i, WP_CONTENT_URL.$file_path, false, false, true);
 					}
-
+					
 					//set any existing data that was added with wp_localize_script
-					if($header[$i]['data'] != '') {
-						$wp_scripts->registered['header-'.$i]->extra['data'] = $header[$i]['data'];
+					if($footer[$i]['data'] != '') {
+						$wp_scripts->registered['footer-'.$i]->extra['data'] = $footer[$i]['data'];
 					}
 					
-					wp_enqueue_script('header-'.$i);
-				
+					wp_enqueue_script('footer-'.$i);
+					
 				} else { //external
-					
-					wp_enqueue_script($header[$i]['handle']);
-					
+					wp_enqueue_script($footer[$i]['handle']);
 				}
+			} 
+			
+			$wp_scripts->done = $done;
 		}
+  }
 
+  public function inspect_stylescripts_footer() {
+
+		global $wp_scripts;
 		
-		//loop through footer scripts and merge + schedule wpcron
-		for($i=0,$l=count($footer);$i<$l;$i++) {
-				
-			if(!isset($footer[$i]['handle'])) {
-
-				$hash = md5(implode('',$footer[$i]['handles']));
-				
-				$file_path = '/mmr/'.$hash.'-'.$footer[$i]['modified'].'.js';
-					
-				$full_path = WP_CONTENT_DIR.$file_path;
-				
-				$min_path = '/mmr/'.$hash.'-'.$footer[$i]['modified'].'.min.js';
-				
-				$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
-				
-				if(!file_exists($full_path) && !$min_exists) {
-
-					$js = '';
-					
-					$log = "";
-					
-					foreach( $footer[$i]['handles'] as $handle ) :
-					
-						$log .= " - ".$handle." - ".$wp_scripts->registered[$handle]->src."\n";
+		if($wp_scripts) {
+		
+			$scripts = wp_clone( $wp_scripts );
+	    
+	    $scripts->all_deps($scripts->queue);
 	
-						$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
-						
-						$contents = file_get_contents($this->root.$script_path['path']);
-						
-						// Remove the BOM
-						$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
-						
-						$js .= $contents . "\n";
+	    $footer = array();
+	    
+	    // Loop through queue and determine groups of handles & latest modified date
+	    foreach( $scripts->to_do as $handle ) :
+	    
+	    	$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
+
+		    if( $this->host_match($wp_scripts->registered[$handle]->src)) { //is a local script
 	
-					endforeach;
+					if(isset($footer[count($footer)-1]['handle']) || count($footer) == 0  ) {
+						array_push($footer, array('modified'=>0,'handles'=>array(), 'data'=>''));
+			    }
+	
+					//save any data added with wp_localize_script
+			    if(isset($wp_scripts->registered[$handle]->extra['data'])) {
+						$footer[count($footer)-1]['data'] .= $wp_scripts->registered[$handle]->extra['data'];
+					}
 					
-					//remove existing expired files
-					array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.js'));
-
-					file_put_contents($full_path , $js);
+					$modified = 0;
 					
-					file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
+					if(is_file($this->root.$script_path['path'])) {
+						$modified = filemtime($this->root.$script_path['path']);
+					}
+	
+				  array_push($footer[count($footer)-1]['handles'], $handle);
+	
+			   	if($modified > $footer[count($footer)-1]['modified']) {
+				   	$footer[count($footer)-1]['modified'] = $modified;
+			   	}
+			    
+			  } else { //external script
+	
+					array_push($footer, array('handle'=>$handle,'data'=>''));
+	
+			  }
+	
+			  wp_dequeue_script($handle); //dequeue all scripts as we will enqueue in order below
+	
+			endforeach;
+			
+			$done = $scripts->done;
+	
+			//loop through footer scripts and merge + schedule wpcron
+			for($i=0,$l=count($footer);$i<$l;$i++) {
 					
-					wp_clear_scheduled_hook('compress_js', array($full_path));
-					wp_schedule_single_event( time(), 'compress_js', array($full_path) );
-
+				if(!isset($footer[$i]['handle'])) {
+					
+					$done = array_merge($done, $footer[$i]['handles']);
+	
+					$hash = md5(implode('',$footer[$i]['handles']));
+					
+					$file_path = '/mmr/'.$hash.'-'.$footer[$i]['modified'].'.js';
+						
+					$full_path = WP_CONTENT_DIR.$file_path;
+					
+					$min_path = '/mmr/'.$hash.'-'.$footer[$i]['modified'].'.min.js';
+					
+					$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
+					
+					if(!file_exists($full_path) && !$min_exists) {
+						
+						$js = '';
+						
+						$log = "";
+						
+						foreach( $footer[$i]['handles'] as $handle ) :
+						
+							$log .= " - ".$handle." - ".$wp_scripts->registered[$handle]->src."\n";
+		
+							$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
+							
+							$contents = file_get_contents($this->root.$script_path['path']);
+							
+							// Remove the BOM
+							$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
+							
+							$js .= $contents . "\n";
+		
+						endforeach;
+						
+						//remove existing expired files
+						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.js'));
+	
+						file_put_contents($full_path , $js);
+						
+						file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
+						
+						wp_clear_scheduled_hook('compress_js', array($full_path));
+						wp_schedule_single_event( time(), 'compress_js', array($full_path) );
+	
+					}
+					
+					if($min_exists) {
+						wp_register_script('footer-'.$i, WP_CONTENT_URL.$min_path, false, false, true);
+					} else {
+						wp_register_script('footer-'.$i, WP_CONTENT_URL.$file_path, false, false, true);
+					}
+					
+					//set any existing data that was added with wp_localize_script
+					if($footer[$i]['data'] != '') {
+						$wp_scripts->registered['footer-'.$i]->extra['data'] = $footer[$i]['data'];
+					}
+					
+					wp_enqueue_script('footer-'.$i);
+					
+				} else { //external
+						
+					wp_enqueue_script($header[$i]['handle']);
+						
 				}
-				
-				if($min_exists) {
-					wp_register_script('footer-'.$i, WP_CONTENT_URL.$min_path, false, false, true);
-				} else {
-					wp_register_script('footer-'.$i, WP_CONTENT_URL.$file_path, false, false, true);
-				}
-				
-				//set any existing data that was added with wp_localize_script
-				if($footer[$i]['data'] != '') {
-					$wp_scripts->registered['footer-'.$i]->extra['data'] = $footer[$i]['data'];
-				}
-				
-				wp_enqueue_script('footer-'.$i);
-				
-			} else { //external
+			} 
+			
+			$wp_scripts->done = $done;
+			
+			
+			
+			
+			
+			global $wp_styles;		
+	
+			$styles = wp_clone( $wp_styles );
+	    
+	    $styles->all_deps($styles->queue);
+	    
+	    $footer = array();
+	    
+	    // Loop through queue and determine groups of handles & latest modified date
+	    foreach( $styles->to_do as $handle ) :
+	    
+	    	$style_path = parse_url($this->ensure_scheme($wp_styles->registered[$handle]->src));
+	
+		    if( $this->host_match($wp_styles->registered[$handle]->src) ) { //is a local script
+	
+					if(isset($footer[count($footer)-1]['handle']) || count($footer) == 0 || $footer[count($footer)-1]['media'] != $wp_styles->registered[$handle]->args ) {
+						$media = isset($wp_styles->registered[$handle]->args) ? $wp_styles->registered[$handle]->args : 'all';
+	
+						array_push($footer, array('modified'=>0,'handles'=>array(),'media'=>$media ));
+			    }
+			    
+			    $media_type = $wp_styles->registered[$handle]->args;
+	
+					$modified = 0;
 					
-				wp_enqueue_script($header[$i]['handle']);
+					if(is_file($this->root.$style_path['path'])) {
+						$modified = filemtime($this->root.$style_path['path']);
+					}
+	
+				  array_push($footer[count($footer)-1]['handles'], $handle);
+	
+			   	if($modified > $footer[count($footer)-1]['modified']) {
+				   	$footer[count($footer)-1]['modified'] = $modified;
+			   	}
+			    
+			  } else { //external script
+	
+					array_push($footer, array('handle'=>$handle));
+					$media_type = null;
+	
+			  }
+	
+				wp_dequeue_style($handle); //dequeue all styles as we will enqueue in order below
+	
+			endforeach;
+			
+			$done = $styles->done;
+	
+			//loop through header styles and merge + schedule wpcron
+			for($i=0,$l=count($footer);$i<$l;$i++) {
+	
+					if(!isset($footer[$i]['handle'])) {
+						
+						$done = array_merge($done, $footer[$i]['handles']);
+						
+						$hash = md5(implode('',$footer[$i]['handles']));
+	
+						$file_path = '/mmr/'.$hash.'-'.$footer[$i]['modified'].'.css';
+	
+						$full_path = WP_CONTENT_DIR.$file_path;
+						
+						$min_path = '/mmr/'.$hash.'-'.$footer[$i]['modified'].'.min.css';
+						
+						$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
+						
+						if(!file_exists($full_path) && !$min_exists) {
+	
+							$css = '';
+							
+							$log = "";
+	
+							foreach( $footer[$i]['handles'] as $handle ) :
+	
+								$style_path = parse_url($this->ensure_scheme($wp_styles->registered[$handle]->src));
+								
+								$log .= " - ".$handle." - ".$wp_styles->registered[$handle]->src."\n";
+								
+								$css_contents = file_get_contents($this->root.$style_path['path']);
+								
+								// Remove the BOM
+								$css_contents = preg_replace("/^\xEF\xBB\xBF/", '', $css_contents);
+	
+								//convert relative paths to absolute & ignore data: or absolute paths (starts with /)
+								$css_contents =preg_replace("/url\(\s*['\"]?(?!data:)(?!http)(?![\/'\"])(.+?)['\"]?\s*\)/i", "url(".dirname($style_path['path'])."/$1)", $css_contents);
+	
+								$css .= $css_contents . "\n";
+			
+							endforeach;
+							
+							//remove existing out of date files
+							array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.css'));
+	
+							file_put_contents($full_path , $css);
+							
+							file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
+								
+							wp_clear_scheduled_hook('compress_css', array($full_path) );
+							wp_schedule_single_event( time(), 'compress_css', array($full_path) );
+						}
+						
+						if($min_exists) {
+							wp_register_style('footer-'.$i, WP_CONTENT_URL.$min_path,false,false,$footer[$i]['media']);
+						} else {
+							wp_register_style('footer-'.$i, WP_CONTENT_URL.$file_path,false,false,$footer[$i]['media']);
+						}
+						
+						wp_enqueue_style('footer-'.$i);
 					
+					} else { //external
+						
+						wp_enqueue_style($footer[$i]['handle']);
+						
+					}
+	
 			}
-		} 
+			
+			$wp_styles->done = $done;
+			
+		}
 
   }
   
   public function inspect_styles() {
 
 		global $wp_styles;		
-
-		$styles = wp_clone( $wp_styles );
-    
-    $styles->all_deps($styles->queue);
-    
-    $header = array();
-    
-    // Loop through queue and determine groups of handles & latest modified date
-    foreach( $styles->to_do as $handle ) :
-    
-    	$style_path = parse_url($this->ensure_scheme($wp_styles->registered[$handle]->src));
-
-	    if( $this->host_match($wp_styles->registered[$handle]->src) ) { //is a local script
-
-				if(isset($header[count($header)-1]['handle']) || count($header) == 0 || $header[count($header)-1]['media'] != $wp_styles->registered[$handle]->args ) {
-					$media = isset($wp_styles->registered[$handle]->args) ? $wp_styles->registered[$handle]->args : 'all';
-
-					array_push($header, array('modified'=>0,'handles'=>array(),'media'=>$media ));
-		    }
-		    
-		    $media_type = $wp_styles->registered[$handle]->args;
-
-				$modified = 0;
-				
-				if(is_file($this->root.$style_path['path'])) {
-					$modified = filemtime($this->root.$style_path['path']);
-				}
-
-			  array_push($header[count($header)-1]['handles'], $handle);
-
-		   	if($modified > $header[count($header)-1]['modified']) {
-			   	$header[count($header)-1]['modified'] = $modified;
-		   	}
-		    
-		  } else { //external script
-
-				array_push($header, array('handle'=>$handle));
-				$media_type = null;
-
-		  }
-
-			wp_dequeue_style($handle); //dequeue all styles as we will enqueue in order below
-
-		endforeach;
-
-		//loop through header styles and merge + schedule wpcron
-		for($i=0,$l=count($header);$i<$l;$i++) {
-
-				if(!isset($header[$i]['handle'])) {
-					
-					$hash = md5(implode('',$header[$i]['handles']));
-
-					$file_path = '/mmr/'.$hash.'-'.$header[$i]['modified'].'.css';
-
-					$full_path = WP_CONTENT_DIR.$file_path;
-					
-					$min_path = '/mmr/'.$hash.'-'.$header[$i]['modified'].'.min.css';
-					
-					$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
-					
-					if(!file_exists($full_path) && !$min_exists) {
-
-						$css = '';
-						
-						$log = "";
-
-						foreach( $header[$i]['handles'] as $handle ) :
-
-							$style_path = parse_url($this->ensure_scheme($wp_styles->registered[$handle]->src));
-							
-							$log .= " - ".$handle." - ".$wp_styles->registered[$handle]->src."\n";
-							
-							$css_contents = file_get_contents($this->root.$style_path['path']);
-							
-							// Remove the BOM
-							$css_contents = preg_replace("/^\xEF\xBB\xBF/", '', $css_contents);
-
-							//convert relative paths to absolute & ignore data: or absolute paths (starts with /)
-							$css_contents =preg_replace("/url\(\s*['\"]?(?!data:)(?!http)(?![\/'\"])(.+?)['\"]?\s*\)/i", "url(".dirname($style_path['path'])."/$1)", $css_contents);
-
-							$css .= $css_contents . "\n";
 		
-						endforeach;
-						
-						//remove existing out of date files
-						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.css'));
+		if($wp_styles) {
 
-						file_put_contents($full_path , $css);
+			$styles = wp_clone( $wp_styles );
+	    
+	    $styles->all_deps($styles->queue);
+	    
+	    $header = array();
+	    
+	    // Loop through queue and determine groups of handles & latest modified date
+	    foreach( $styles->to_do as $handle ) :
+	    
+	    	$style_path = parse_url($this->ensure_scheme($wp_styles->registered[$handle]->src));
+	
+		    if( $this->host_match($wp_styles->registered[$handle]->src) ) { //is a local script
+	
+					if(isset($header[count($header)-1]['handle']) || count($header) == 0 || $header[count($header)-1]['media'] != $wp_styles->registered[$handle]->args ) {
+						$media = isset($wp_styles->registered[$handle]->args) ? $wp_styles->registered[$handle]->args : 'all';
+	
+						array_push($header, array('modified'=>0,'handles'=>array(),'media'=>$media ));
+			    }
+			    
+			    $media_type = $wp_styles->registered[$handle]->args;
+	
+					$modified = 0;
+					
+					if(is_file($this->root.$style_path['path'])) {
+						$modified = filemtime($this->root.$style_path['path']);
+					}
+	
+				  array_push($header[count($header)-1]['handles'], $handle);
+	
+			   	if($modified > $header[count($header)-1]['modified']) {
+				   	$header[count($header)-1]['modified'] = $modified;
+			   	}
+			    
+			  } else { //external script
+	
+					array_push($header, array('handle'=>$handle));
+					$media_type = null;
+	
+			  }
+	
+				wp_dequeue_style($handle); //dequeue all styles as we will enqueue in order below
+	
+			endforeach;
+			
+			$done = $styles->done;
+	
+			//loop through header styles and merge + schedule wpcron
+			for($i=0,$l=count($header);$i<$l;$i++) {
+	
+					if(!isset($header[$i]['handle'])) {
 						
-						file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
+						$done = array_merge($done, $header[$i]['handles']);
+						
+						$hash = md5(implode('',$header[$i]['handles']));
+	
+						$file_path = '/mmr/'.$hash.'-'.$header[$i]['modified'].'.css';
+	
+						$full_path = WP_CONTENT_DIR.$file_path;
+						
+						$min_path = '/mmr/'.$hash.'-'.$header[$i]['modified'].'.min.css';
+						
+						$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
+						
+						if(!file_exists($full_path) && !$min_exists) {
+	
+							$css = '';
 							
-						wp_clear_scheduled_hook('compress_css', array($full_path) );
-						wp_schedule_single_event( time(), 'compress_css', array($full_path) );
+							$log = "";
+	
+							foreach( $header[$i]['handles'] as $handle ) :
+	
+								$style_path = parse_url($this->ensure_scheme($wp_styles->registered[$handle]->src));
+								
+								$log .= " - ".$handle." - ".$wp_styles->registered[$handle]->src."\n";
+								
+								$css_contents = file_get_contents($this->root.$style_path['path']);
+								
+								// Remove the BOM
+								$css_contents = preg_replace("/^\xEF\xBB\xBF/", '', $css_contents);
+	
+								//convert relative paths to absolute & ignore data: or absolute paths (starts with /)
+								$css_contents =preg_replace("/url\(\s*['\"]?(?!data:)(?!http)(?![\/'\"])(.+?)['\"]?\s*\)/i", "url(".dirname($style_path['path'])."/$1)", $css_contents);
+	
+								$css .= $css_contents . "\n";
+			
+							endforeach;
+							
+							//remove existing out of date files
+							array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.css'));
+	
+							file_put_contents($full_path , $css);
+							
+							file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
+								
+							wp_clear_scheduled_hook('compress_css', array($full_path) );
+							wp_schedule_single_event( time(), 'compress_css', array($full_path) );
+						}
+						
+						if($min_exists) {
+							wp_register_style('header-'.$i, WP_CONTENT_URL.$min_path,false,false,$header[$i]['media']);
+						} else {
+							wp_register_style('header-'.$i, WP_CONTENT_URL.$file_path,false,false,$header[$i]['media']);
+						}
+						
+						wp_enqueue_style('header-'.$i);
+					
+					} else { //external
+						
+						wp_enqueue_style($header[$i]['handle']);
+						
 					}
-					
-					if($min_exists) {
-						wp_register_style('header-'.$i, WP_CONTENT_URL.$min_path,false,false,$header[$i]['media']);
-					} else {
-						wp_register_style('header-'.$i, WP_CONTENT_URL.$file_path,false,false,$header[$i]['media']);
-					}
-					
-					wp_enqueue_style('header-'.$i);
-				
-				} else { //external
-					
-					wp_enqueue_style($header[$i]['handle']);
-					
-				}
-
+	
+			}
+			
+			$wp_styles->done = $done;
+		
 		}
 	  
 	}

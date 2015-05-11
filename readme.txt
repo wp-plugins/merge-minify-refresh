@@ -42,6 +42,11 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 1.3 =
+* Process styles/scriptes enqued within body of page in the footer
+* Prevent scripts enqued within body of page outputting twice
+* Clear previous processed files fully when purge all clicked
+
 = 1.2 =
 * Bugfix
 

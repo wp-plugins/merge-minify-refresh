@@ -33,6 +33,9 @@
 			
 			$mmr_noprocessed.show();
 			$mmr_processed.hide();
+			
+			$mmr_jsprocessed_ul.html('');
+			$mmr_cssprocessed_ul.html('');
 		});
 		
 		function getFiles(extra) {
