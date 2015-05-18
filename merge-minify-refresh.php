@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
- * Version: 1.3
+ * Version: 1.4
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -69,7 +69,7 @@ class MergeMinifyRefresh {
     	add_filter( 'style_loader_src', array($this,'remove_cssjs_ver'), 10, 2 );
 			add_filter( 'script_loader_src', array($this,'remove_cssjs_ver'), 10, 2 );
 
-			add_action( 'wp_footer', array($this,'inspect_stylescripts_footer'), ~PHP_INT_MAX );
+			add_action( 'wp_footer', array($this,'inspect_stylescripts_footer'), 9.999 ); //10 = Internal WordPress Output
     }
     
     register_deactivation_hook( __FILE__, array($this, 'plugin_deactivate') );
@@ -225,24 +225,6 @@ class MergeMinifyRefresh {
 	private function ensure_scheme($url) {
 		return preg_replace("/(http(s)?:\/\/|\/\/)(.*)/i", "http$2://$3", $url);
 	}
-	
-	private function remove_continuations_callback($matches) {
-		if (!isset($matches[1])) {
-			return $matches[0];
-		}
-    return preg_replace('#\\\\(?:\\r\\n?|\\n)#', '', $matches[1]);
-	}
-
-	//Comments could contain quotation-marks, and strings could contain slashes.
-	private function remove_continuations($js) {
-
-		return preg_replace_callback(
-	    '#//[^\\r\\n]*|/\\*.*?\\*/|("(?:\\\\.|[^\\\\"])*"|\'(?:\\\\.|[^\\\\\'])*\')#s',
-	    array($this,'remove_continuations_callback'),
-	    $js
-		);
-
-	}
 
 	public function inspect_scripts() {
 
@@ -268,13 +250,8 @@ class MergeMinifyRefresh {
 			    if( $this->host_match($wp_scripts->registered[$handle]->src)) { //is a local script
 		
 						if(isset($header[count($header)-1]['handle']) || count($header) == 0  ) {
-							array_push($header, array('modified'=>0,'handles'=>array(), 'data'=>''));
+							array_push($header, array('modified'=>0,'handles'=>array()));
 				    }
-		
-						//save any data added with wp_localize_script
-				    if(isset($wp_scripts->registered[$handle]->extra['data'])) {
-							$header[count($header)-1]['data'] .= $wp_scripts->registered[$handle]->extra['data'];
-						}
 						
 						$modified = 0;
 						
@@ -290,11 +267,9 @@ class MergeMinifyRefresh {
 				    
 				  } else { //external script
 		
-						array_push($header, array('handle'=>$handle,'data'=>''));
+						array_push($header, array('handle'=>$handle));
 		
 				  }
-		
-				  wp_dequeue_script($handle); //dequeue all scripts as we will enqueue in order below
 			  
 			  }
 	
@@ -350,6 +325,14 @@ class MergeMinifyRefresh {
 							wp_clear_scheduled_hook('compress_js', array($full_path) );
 							wp_schedule_single_event( time(), 'compress_js', array($full_path) );
 						}
+						
+						
+						$data = '';
+						foreach( $header[$i]['handles'] as $handle ) :					
+							if(isset($wp_scripts->registered[$handle]->extra['data'])) {
+								$data .= $wp_scripts->registered[$handle]->extra['data'];
+							}
+						endforeach;
 	
 						if($min_exists) {
 							wp_register_script('header-'.$i, WP_CONTENT_URL.$min_path);
@@ -358,8 +341,8 @@ class MergeMinifyRefresh {
 						}
 	
 						//set any existing data that was added with wp_localize_script
-						if($header[$i]['data'] != '') {
-							$wp_scripts->registered['header-'.$i]->extra['data'] = $header[$i]['data'];
+						if($data != '') {
+							$wp_scripts->registered['header-'.$i]->extra['data'] = $data;
 						}
 						
 						wp_enqueue_script('header-'.$i);
@@ -370,77 +353,8 @@ class MergeMinifyRefresh {
 						
 					}
 			}
-	
-			
-			
-			//loop through footer scripts and merge + schedule wpcron
-			for($i=0,$l=count($footer);$i<$l;$i++) {
-					
-				if(!isset($footer[$i]['handle'])) {
-					
-					$done = array_merge($done, $footer[$i]['handles']);
-	
-					$hash = md5(implode('',$footer[$i]['handles']));
-					
-					$file_path = '/mmr/'.$hash.'-'.$footer[$i]['modified'].'.js';
+
 						
-					$full_path = WP_CONTENT_DIR.$file_path;
-					
-					$min_path = '/mmr/'.$hash.'-'.$footer[$i]['modified'].'.min.js';
-					
-					$min_exists = file_exists(WP_CONTENT_DIR.$min_path);
-					
-					if(!file_exists($full_path) && !$min_exists) {
-						
-						$js = '';
-						
-						$log = "";
-						
-						foreach( $footer[$i]['handles'] as $handle ) :
-						
-							$log .= " - ".$handle." - ".$wp_scripts->registered[$handle]->src."\n";
-		
-							$script_path = parse_url($this->ensure_scheme($wp_scripts->registered[$handle]->src));
-							
-							$contents = file_get_contents($this->root.$script_path['path']);
-							
-							// Remove the BOM
-							$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
-							
-							$js .= $contents . "\n";
-		
-						endforeach;
-						
-						//remove existing expired files
-						array_map('unlink', glob(WP_CONTENT_DIR.'/mmr/'.$hash.'-*.js'));
-	
-						file_put_contents($full_path , $js);
-						
-						file_put_contents($full_path.'.log', date('c')." - MERGED:\n".$log);
-						
-						wp_clear_scheduled_hook('compress_js', array($full_path));
-						wp_schedule_single_event( time(), 'compress_js', array($full_path) );
-	
-					}
-					
-					if($min_exists) {
-						wp_register_script('footer-'.$i, WP_CONTENT_URL.$min_path, false, false, true);
-					} else {
-						wp_register_script('footer-'.$i, WP_CONTENT_URL.$file_path, false, false, true);
-					}
-					
-					//set any existing data that was added with wp_localize_script
-					if($footer[$i]['data'] != '') {
-						$wp_scripts->registered['footer-'.$i]->extra['data'] = $footer[$i]['data'];
-					}
-					
-					wp_enqueue_script('footer-'.$i);
-					
-				} else { //external
-					wp_enqueue_script($footer[$i]['handle']);
-				}
-			} 
-			
 			$wp_scripts->done = $done;
 		}
   }
@@ -465,13 +379,8 @@ class MergeMinifyRefresh {
 		    if( $this->host_match($wp_scripts->registered[$handle]->src)) { //is a local script
 	
 					if(isset($footer[count($footer)-1]['handle']) || count($footer) == 0  ) {
-						array_push($footer, array('modified'=>0,'handles'=>array(), 'data'=>''));
+						array_push($footer, array('modified'=>0,'handles'=>array()));
 			    }
-	
-					//save any data added with wp_localize_script
-			    if(isset($wp_scripts->registered[$handle]->extra['data'])) {
-						$footer[count($footer)-1]['data'] .= $wp_scripts->registered[$handle]->extra['data'];
-					}
 					
 					$modified = 0;
 					
@@ -487,11 +396,9 @@ class MergeMinifyRefresh {
 			    
 			  } else { //external script
 	
-					array_push($footer, array('handle'=>$handle,'data'=>''));
+					array_push($footer, array('handle'=>$handle));
 	
 			  }
-	
-			  wp_dequeue_script($handle); //dequeue all scripts as we will enqueue in order below
 	
 			endforeach;
 			
@@ -547,6 +454,13 @@ class MergeMinifyRefresh {
 	
 					}
 					
+					$data = '';
+					foreach( $footer[$i]['handles'] as $handle ) :					
+						if(isset($wp_scripts->registered[$handle]->extra['data'])) {
+							$data .= $wp_scripts->registered[$handle]->extra['data'];
+						}
+					endforeach;
+					
 					if($min_exists) {
 						wp_register_script('footer-'.$i, WP_CONTENT_URL.$min_path, false, false, true);
 					} else {
@@ -554,8 +468,8 @@ class MergeMinifyRefresh {
 					}
 					
 					//set any existing data that was added with wp_localize_script
-					if($footer[$i]['data'] != '') {
-						$wp_scripts->registered['footer-'.$i]->extra['data'] = $footer[$i]['data'];
+					if($data != '') {
+						$wp_scripts->registered['footer-'.$i]->extra['data'] = $data;
 					}
 					
 					wp_enqueue_script('footer-'.$i);
@@ -614,8 +528,6 @@ class MergeMinifyRefresh {
 					$media_type = null;
 	
 			  }
-	
-				wp_dequeue_style($handle); //dequeue all styles as we will enqueue in order below
 	
 			endforeach;
 			
@@ -741,8 +653,6 @@ class MergeMinifyRefresh {
 	
 			  }
 	
-				wp_dequeue_style($handle); //dequeue all styles as we will enqueue in order below
-	
 			endforeach;
 			
 			$done = $styles->done;
@@ -856,7 +766,7 @@ class MergeMinifyRefresh {
 				// Remove Javascript String Continuations
 				$contents = file_get_contents($full_path);
 				if(strpos($contents, "\\".PHP_EOL) !== FALSE) { //only remove continuations if they exist
-					$contents = $this->remove_continuations($contents);
+					$contents = preg_replace('#\\\\(\n|\r\n?)#', '', $contents);
 					file_put_contents($full_path, $contents);
 				}
 				

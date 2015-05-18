@@ -42,6 +42,12 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 1.4 =
+* Remove unused code in insepect_scripts()
+* Resolved issues with late enqued scripts and styles
+* Changed code for removal of string continuations
+* Stopped dequeing styles and scripts as we now use done
+
 = 1.3 =
 * Process styles/scriptes enqued within body of page in the footer
 * Prevent scripts enqued within body of page outputting twice
