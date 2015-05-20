@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
- * Version: 1.4
+ * Version: 1.4.1
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -55,21 +55,21 @@ class MergeMinifyRefresh {
 	    
 	  } else {
 
-			$this->host = $_SERVER['HTTP_HOST'];
-			//php < 5.4.7 returns null if host without scheme entered
-			if(mb_substr($this->host, 0, 4) !== 'http') $this->host = 'http'.(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off' ? 's' : '').'://' . $this->host;
-			$this->host = parse_url( $this->host, PHP_URL_HOST );
+		$this->host = $_SERVER['HTTP_HOST'];
+		//php < 5.4.7 returns null if host without scheme entered
+		if(mb_substr($this->host, 0, 4) !== 'http') $this->host = 'http'.(isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off' ? 's' : '').'://' . $this->host;
+		$this->host = parse_url( $this->host, PHP_URL_HOST );
 	    
 	    add_action( 'compress_css',array($this,'compress_css_action'), 10, 1 );
-			add_action( 'compress_js', array($this,'compress_js_action'), 10, 1 );
+		add_action( 'compress_js', array($this,'compress_js_action'), 10, 1 );
 	    
     	add_action( 'wp_print_scripts', array($this,'inspect_scripts'), PHP_INT_MAX );
     	add_action( 'wp_print_styles', array($this,'inspect_styles'), PHP_INT_MAX );
     	
     	add_filter( 'style_loader_src', array($this,'remove_cssjs_ver'), 10, 2 );
-			add_filter( 'script_loader_src', array($this,'remove_cssjs_ver'), 10, 2 );
+		add_filter( 'script_loader_src', array($this,'remove_cssjs_ver'), 10, 2 );
 
-			add_action( 'wp_footer', array($this,'inspect_stylescripts_footer'), 9.999 ); //10 = Internal WordPress Output
+		add_action( 'wp_print_footer_scripts', array($this,'inspect_stylescripts_footer'), 9.999999 ); //10 = Internal WordPress Output
     }
     
     register_deactivation_hook( __FILE__, array($this, 'plugin_deactivate') );

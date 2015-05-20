@@ -42,6 +42,9 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 1.4.1 =
+* woocommerce compatability
+
 = 1.4 =
 * Remove unused code in insepect_scripts()
 * Resolved issues with late enqued scripts and styles
