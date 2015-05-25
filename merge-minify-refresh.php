@@ -4,7 +4,7 @@
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
  * Version: 1.4.2
- * Author: Marc Castles
+ * Author: Launch Interactive
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
 */
