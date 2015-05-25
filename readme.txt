@@ -42,6 +42,9 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 1.4.2 =
+* Append ; to merged script files to prevent javascript errors
+
 = 1.4.1 =
 * woocommerce compatability
 

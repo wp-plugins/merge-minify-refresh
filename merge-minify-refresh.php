@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
- * Version: 1.4.1
+ * Version: 1.4.2
  * Author: Marc Castles
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -311,7 +311,7 @@ class MergeMinifyRefresh {
 								// Remove the BOM
 								$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
 								
-								$js .= $contents . "\n";
+								$js .= $contents . ";\n";
 			
 							endforeach;
 	
@@ -438,7 +438,7 @@ class MergeMinifyRefresh {
 							// Remove the BOM
 							$contents = preg_replace("/^\xEF\xBB\xBF/", '', $contents);
 							
-							$js .= $contents . "\n";
+							$js .= $contents . ";\n";
 		
 						endforeach;
 						
