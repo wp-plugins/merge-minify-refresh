@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
- * Version: 1.4.2
+ * Version: 1.4.3
  * Author: Launch Interactive
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -476,7 +476,7 @@ class MergeMinifyRefresh {
 					
 				} else { //external
 						
-					wp_enqueue_script($header[$i]['handle']);
+					wp_enqueue_script($footer[$i]['handle']);
 						
 				}
 			} 
