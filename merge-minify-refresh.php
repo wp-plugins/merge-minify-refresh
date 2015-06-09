@@ -507,8 +507,6 @@ class MergeMinifyRefresh {
 	
 						array_push($footer, array('modified'=>0,'handles'=>array(),'media'=>$media ));
 			    }
-			    
-			    $media_type = $wp_styles->registered[$handle]->args;
 	
 					$modified = 0;
 					
@@ -525,7 +523,6 @@ class MergeMinifyRefresh {
 			  } else { //external script
 	
 					array_push($footer, array('handle'=>$handle));
-					$media_type = null;
 	
 			  }
 	
@@ -626,31 +623,25 @@ class MergeMinifyRefresh {
 	
 		    if( $this->host_match($wp_styles->registered[$handle]->src) ) { //is a local script
 	
-					if(isset($header[count($header)-1]['handle']) || count($header) == 0 || $header[count($header)-1]['media'] != $wp_styles->registered[$handle]->args ) {
-						$media = isset($wp_styles->registered[$handle]->args) ? $wp_styles->registered[$handle]->args : 'all';
-	
-						array_push($header, array('modified'=>0,'handles'=>array(),'media'=>$media ));
+				if(isset($header[count($header)-1]['handle']) || count($header) == 0 || $header[count($header)-1]['media'] != $wp_styles->registered[$handle]->args ) {
+					$media = isset($wp_styles->registered[$handle]->args) ? $wp_styles->registered[$handle]->args : 'all';
+					array_push($header, array('modified'=>0,'handles'=>array(),'media'=>$media ));
 			    }
-			    
-			    $media_type = $wp_styles->registered[$handle]->args;
 	
-					$modified = 0;
+				$modified = 0;
 					
-					if(is_file($this->root.$style_path['path'])) {
-						$modified = filemtime($this->root.$style_path['path']);
-					}
+				if(is_file($this->root.$style_path['path'])) {
+					$modified = filemtime($this->root.$style_path['path']);
+				}
 	
-				  array_push($header[count($header)-1]['handles'], $handle);
+				array_push($header[count($header)-1]['handles'], $handle);
 	
 			   	if($modified > $header[count($header)-1]['modified']) {
 				   	$header[count($header)-1]['modified'] = $modified;
 			   	}
 			    
 			  } else { //external script
-	
-					array_push($header, array('handle'=>$handle));
-					$media_type = null;
-	
+				array_push($header, array('handle'=>$handle));
 			  }
 	
 			endforeach;
