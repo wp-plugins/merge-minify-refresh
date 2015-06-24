@@ -13,7 +13,7 @@
 		
 		$($mmr_processed).on('click','.log',function(e){
 			e.preventDefault();
-			$(this).nextAll('pre').slideToggle();
+			$(this).parent().nextAll('pre').slideToggle();
 		});
 		
 		$($mmr_processed).on('click','.purge',function(e){
@@ -22,7 +22,7 @@
 			clearInterval(timeout);
 			getFiles({purge:$(this).attr('href').substr(1)});
 			
-			$(this).parent().remove();
+			$(this).parent().parent().remove();
 		});
 		
 		$('.purgeall',$mmr_processed).on('click',function(e){
@@ -69,13 +69,16 @@
 								if($li.find('pre').html() != this.log) {
 									$li.find('pre').html(this.log);
 								}
+								if($li.find('.accessed').html() != 'Last Accessed: ' + this.accessed) {
+									$li.find('.accessed').html('Last Accessed: ' + this.accessed);
+								}
 								if(this.error) {
 									$filename.addClass('error');
 								} else {
 									$filename.removeClass('error');
 								}
 							} else {
-								$mmr_jsprocessed_ul.append('<li class="'+this.hash+'"><span class="filename'+(this.error?' error':'')+'">'+this.filename+scheduled+'</span> <a href="#" class="log button button-primary">View Log</a> <a href="#'+this.hash+'" class="button button-secondary purge">Purge</a><pre>'+this.log+'</pre></li>');
+								$mmr_jsprocessed_ul.append('<li class="'+this.hash+'"><span class="filename'+(this.error?' error':'')+'">'+this.filename+scheduled+'</span> <span class="accessed">Last Accessed: '+this.accessed+'</span> <span class="actions"><a href="#" class="log button button-primary">View Log</a> <a href="#'+this.hash+'" class="button button-secondary purge">Purge</a></span><pre>'+this.log+'</pre></li>');
 							}
 						});
 						
@@ -99,13 +102,16 @@
 								if($li.find('pre').html() != this.log) {
 									$li.find('pre').html(this.log);
 								}
+								if($li.find('.accessed').html() != 'Last Accessed: ' + this.accessed) {
+									$li.find('.accessed').html('Last Accessed: ' + this.accessed);
+								}
 								if(this.error) {
 									$filename.addClass('error');
 								} else {
 									$filename.removeClass('error');
 								}
 							} else {
-								$mmr_cssprocessed_ul.append('<li class="'+this.hash+'"><span class="filename'+(this.error?' error':'')+'">'+this.filename+scheduled+'</span> <a href="#" class="log button button-primary">View Log</a> <a href="#'+this.hash+'" class="button button-secondary purge">Purge</a><pre>'+this.log+'</pre></li>');
+								$mmr_cssprocessed_ul.append('<li class="'+this.hash+'"><span class="filename'+(this.error?' error':'')+'">'+this.filename+scheduled+'</span> <span class="accessed">Last Accessed: '+this.accessed+'</span> <span class="actions"><a href="#" class="log button button-primary">View Log</a> <a href="#'+this.hash+'" class="button button-secondary purge">Purge</a></span><pre>'+this.log+'</pre></li>');
 							}
 						});
 					} else {

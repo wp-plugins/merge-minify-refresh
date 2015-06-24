@@ -42,6 +42,11 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 1.5 =
+* Display last accessed date in admin
+* Remove unused variables
+* Option to turn off merging
+
 = 1.4.3 =
 * Fix wrong variable name
 
