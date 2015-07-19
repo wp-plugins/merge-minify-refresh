@@ -3,7 +3,7 @@
  * Plugin Name: Merge + Minify + Refresh
  * Plugin URI: https://wordpress.org/plugins/merge-minify-refresh
  * Description: 
- * Version: 1.5
+ * Version: 1.5.1
  * Author: Launch Interactive
  * Author URI: http://launchinteractive.com.au
  * License: GPL2
@@ -52,7 +52,7 @@ class MergeMinifyRefresh {
 	    
 	    add_action( 'admin_menu', array($this,'admin_menu') );
 	    
-	    add_action( 'admin_enqueue_scripts', array($this,'load_admin_styles') );
+	    add_action( 'admin_enqueue_scripts', array($this,'load_admin_jscss') );
 	    
 	    add_action( 'wp_ajax_mmr_files', array($this,'mmr_files_callback') );
 		
@@ -179,7 +179,10 @@ class MergeMinifyRefresh {
 	  } rmdir($dir); 
 	}
   
-  public function load_admin_styles() {
+  public function load_admin_jscss($hook) {
+	if ( 'settings_page_merge-minify-refresh' != $hook ) {
+		return;
+	}
     wp_enqueue_style( 'merge-minify-refresh', plugins_url('admin.css', __FILE__) );
     wp_enqueue_script( 'merge-minify-refresh', plugins_url('admin.js', __FILE__), array(), false, true );
   }

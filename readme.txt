@@ -42,6 +42,9 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 
 == Changelog ==
 
+= 1.5.1 =
+* Only load admin js & css on the mmr options page
+
 = 1.5 =
 * Display last accessed date in admin
 * Remove unused variables
