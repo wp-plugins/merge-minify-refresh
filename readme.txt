@@ -4,7 +4,7 @@ Contributors:launchinteractive
 Tags: merge, concatenate, minify, yuicompressor, closure, refresh
 Requires at least: 3.6.1
 Stable tag: trunk
-Tested up to: 4.2
+Tested up to: 4.3
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -41,6 +41,9 @@ In order to ensure fast loading times its recommended to set long expiry dates f
 2. Activate the plugin through the 'Plugins' menu in WordPress
 
 == Changelog ==
+
+= 1.5.2 =
+* Upgrade Minify to latest version
 
 = 1.5.1 =
 * Only load admin js & css on the mmr options page
