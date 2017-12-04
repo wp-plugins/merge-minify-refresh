@@ -37,6 +37,8 @@ class MergeMinifyRefresh {
 	private $host = '';
 	private $root = '';
 	
+	private $should_run_done_hook = false; 
+	
 	private $mergecss = true;
 	private $mergejs = true;
 
@@ -70,6 +72,8 @@ class MergeMinifyRefresh {
 	    
     	add_action( 'wp_print_scripts', array($this,'inspect_scripts'), PHP_INT_MAX );
     	add_action( 'wp_print_styles', array($this,'inspect_styles'), PHP_INT_MAX );
+		
+		add_action('shutdown', array($this, 'should_run_done_hook'), 10); 
     	
     	add_filter( 'style_loader_src', array($this,'remove_cssjs_ver'), 10, 2 );
 		add_filter( 'script_loader_src', array($this,'remove_cssjs_ver'), 10, 2 );
@@ -770,7 +774,9 @@ class MergeMinifyRefresh {
 	}
 	
 	public function compress_css_action($full_path) {
-	
+        // if this function runs, we are processing fresh files
+        $this->should_run_done_hook = true;
+		
 		if(is_file($full_path)) {
 	
 			file_put_contents($full_path.'.log', date('c')." - COMPRESSING CSS\n",FILE_APPEND);
@@ -791,7 +797,9 @@ class MergeMinifyRefresh {
 	}
 	
 	public function compress_js_action($full_path) {
-
+        // if this function runs, we are processing fresh files
+        $this->should_run_done_hook = true;
+		
 		if(is_file($full_path)) {
 			
 
@@ -850,6 +858,12 @@ class MergeMinifyRefresh {
 	  $factor = floor((strlen($bytes) - 1) / 3);
 	  return sprintf("%.{$decimals}f", $bytes / pow(1024, $factor)) . @$sz[$factor];
 	}
+	
+    public function should_run_done_hook() {
+        if ($this->should_run_done_hook === true) { 
+            do_action('merge_minify_refresh_done'); 
+        } 
+    } 
 }
  
 $mergeminifyrefresh = new MergeMinifyRefresh();
